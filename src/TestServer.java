@@ -9,7 +9,6 @@ import java.util.concurrent.Executors;
 public class TestServer {
     private ServerSocket server = null;
     private Socket soc = null;
-    private BufferedReader br = null;
 
     public TestServer()
     {
@@ -37,6 +36,28 @@ public class TestServer {
         return soc;
     }
 
+    public static void main(String[] args)
+    {
+        TestServer MainServer = new TestServer();
+        ExecutorService es = Executors.newFixedThreadPool(4);
+        for (int i=0;i<2;i++){
+            es.submit(new Handler(""+i,i, MainServer.GetSoc()));
+        }
+        es.shutdown();
+    }
+}
+
+class Handler implements Runnable {
+    private final String name;
+    private final int num;
+    private final Socket s;
+    private BufferedReader br = null;
+    public Handler(String name, int num, Socket s) {
+        this.name = name;
+        this.num=num;
+        this.s=s;
+    }
+
     public void GetMsg(Socket s, int i)
     {
         try {
@@ -57,35 +78,12 @@ public class TestServer {
         }
     }
 
-    public static void main(String[] args)
-    {
-        TestServer MainServer = new TestServer();
-        ExecutorService es = Executors.newFixedThreadPool(4);
-        for (int i=0;i<2;i++){
-            es.submit(new Handler(""+i,i, MainServer.GetSoc()));
-        }
-        es.shutdown();
-    }
-}
-
-class Handler implements Runnable {
-    private final String name;
-    private final int num;
-    private final Socket s;
-    public Handler(String name, int num, Socket s) {
-        this.name = name;
-        this.num=num;
-        this.s=s;
-    }
-
     @Override
     public void run()
     {
         System.out.println("Start task: " + name);
         try {
-            //Scanner scanner = new Scanner(System.in);
-            TestServer MyTestServer = new TestServer();
-            MyTestServer.GetMsg(s, num);
+            GetMsg(s, num);
         } catch (Exception e) {
             e.printStackTrace();
         }

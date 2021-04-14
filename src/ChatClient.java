@@ -1,6 +1,5 @@
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.Inet4Address;
 import java.net.Socket;
 import java.util.Scanner;
 
@@ -40,7 +39,7 @@ public class ChatClient {
             while(true){
                 pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
                 Scanner scanner = new Scanner(System.in);
-                pw.println(scanner.next());
+                pw.println(scanner.nextLine());
             }
         } catch (IOException e) {
             e.printStackTrace();
