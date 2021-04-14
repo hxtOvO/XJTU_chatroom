@@ -40,7 +40,7 @@ public class ChatClient {
             while(true){
                 pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
                 Scanner scanner = new Scanner(System.in);
-                String ClientMessage = scanner.next();
+                String ClientMessage = scanner.nextLine();
                 pw.println(ClientMessage);
                 if(ClientMessage.equals("exit") || ClientMessage.equals("bye")){
                     //客户端 优雅的退出
