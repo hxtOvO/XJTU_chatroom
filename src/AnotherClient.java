@@ -12,7 +12,7 @@ import java.util.Scanner;
  * @version 1.0.0
  **/
 
-public class ChatClient {
+public class AnotherClient {
     private Socket socket = null;
     private PrintWriter pw = null;
 
