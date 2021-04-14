@@ -7,7 +7,7 @@ import java.util.Scanner;
 
 /**
  * @program: XJTU_chatroom
- * @description:
+ * @description: only one thread
  * @author: 席卓然
  * @create: 2021-4-13
  * @version 1.0.0
@@ -50,6 +50,9 @@ public class ChatServer {
                     br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String message = br.readLine();//读取出message
                     System.out.println("Client says :"+message);
+                    if(message.equals("exit") || message.equals("bye")){//给Client加一个优雅的退出
+                        break;
+                    }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -59,16 +62,17 @@ public class ChatServer {
                 br.close();
                 socket.close();
                 server.close();
+                System.out.println("Client disconnected...");
             } catch (IOException e) {
                 e.printStackTrace();
             }
     }
 
-    public void transformMessage(String message) {
+    public void transformMessage(String message ,int srcPort , int desPort) {
         /**
          * 服务器端需要转发另一个Client的消息
          * 这里为测试需要，直接将message作为参数输入
-         * message需要修改为从另一个Client.getClientMessage()得到的信息
+         * @apiNote :从srcPort向desPort转发message
         */
     }
 

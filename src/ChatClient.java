@@ -40,7 +40,12 @@ public class ChatClient {
             while(true){
                 pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
                 Scanner scanner = new Scanner(System.in);
-                pw.println(scanner.next());
+                String ClientMessage = scanner.next();
+                pw.println(ClientMessage);
+                if(ClientMessage.equals("exit") || ClientMessage.equals("bye")){
+                    //客户端 优雅的退出
+                    break;
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -51,6 +56,7 @@ public class ChatClient {
                 e.printStackTrace();
             }
             pw.close();
+            System.out.println("Client has disconnected...");
         }
     }
 
