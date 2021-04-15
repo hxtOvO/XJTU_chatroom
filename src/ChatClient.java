@@ -13,8 +13,7 @@ import java.util.Scanner;
 
 public class ChatClient {
     private Socket socket = null;
-    private PrintWriter pw = null;
-    private int count = 0;
+    private volatile int count = 0;
     /**
      * 客户端的动作：
      * sendMessage/readMessage/connectServer/
@@ -36,12 +35,24 @@ public class ChatClient {
             GetMsgFromServer getter = new GetMsgFromServer();
             SendMsgToServer sender = new SendMsgToServer();
             Thread tg = new Thread(getter);
+            inc();
             Thread ts = new Thread(sender);
+            inc();
             tg.start();
             ts.start();
+            while (count != 0) Thread.onSpinWait();
+            ClientClose();
         } catch (Exception e){
             e.printStackTrace();
         }
+    }
+
+    public synchronized void inc(){
+        count++;
+    }
+
+    public synchronized void dec(){
+        count--;
     }
 
     public static void main(String[] args) {
@@ -57,7 +68,7 @@ public class ChatClient {
                 socket = null;
             }
             else{
-                count--;
+                dec();
             }
         } catch (IOException e){
             e.printStackTrace();
@@ -69,13 +80,14 @@ public class ChatClient {
         public void run(){
             try {
                 //socket = connectServer(port);
-                pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
+                PrintWriter pw = new PrintWriter(socket.getOutputStream(), true);//设置autoFlush,刷新缓冲区才有输出
                 while(true){
                     Scanner scanner = new Scanner(System.in);
                     String ClientMessage = scanner.nextLine();
                     pw.println(ClientMessage);
                     if(ClientMessage.equals("/logout")){
                         //客户端 优雅的退出
+                        //socket.shutdownOutput();
                         break;
                     }
                 }
@@ -83,8 +95,6 @@ public class ChatClient {
                 e.printStackTrace();
             } finally {
                 ClientClose();
-                pw.close();
-                //System.out.println("Client has disconnected...");
             }
         }
     }
