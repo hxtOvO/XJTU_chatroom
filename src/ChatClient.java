@@ -36,8 +36,8 @@ public class ChatClient {
     public void sendMessage(int port) {
         try {
             socket = connectServer(port);
-            while(true){
-                pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
+            pw = new PrintWriter(socket.getOutputStream(),true);
+            while(true){//设置autoFlush,刷新缓冲区才有输出
                 Scanner scanner = new Scanner(System.in);
                 pw.println(scanner.nextLine());
             }

@@ -68,8 +68,24 @@ public class ChatServer {
         /**
          * 服务器端需要转发另一个Client的消息
          * 这里为测试需要，直接将message作为参数输入
-         * message需要修改为从另一个Client.getClientMessage()得到的信息
+         * message需要修改为从另一个Client.getClientMessage()得到的信息BufferedReader br = null;
+         *         try {
+         *             while(s.isConnected()) {
+         *                 br = new BufferedReader(new InputStreamReader(s.getInputStream()));
+         *                 String msg = br.readLine();
+         *                 System.out.println("Client" + i + " says: " + msg);
+         *             }
+         *         } catch (IOException e) {
+         *             e.printStackTrace();
+         *         }
+         *         try {
+         *             br.close();
+         *             s.close();
+         *         } catch (IOException e) {
+         *             e.printStackTrace();
+         *         }
         */
+
     }
 
     public static void main(String[] args) {
