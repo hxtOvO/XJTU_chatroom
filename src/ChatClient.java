@@ -1,6 +1,6 @@
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 /**
@@ -14,48 +14,103 @@ import java.util.Scanner;
 public class ChatClient {
     private Socket socket = null;
     private PrintWriter pw = null;
-
+    private int count = 0;
     /**
      * 客户端的动作：
      * sendMessage/readMessage/connectServer/
      * disconnect
      */
 
-    public Socket connectServer(int port) {//连接服务器，并且返回建立连接后的socket
-        try {
+    public ChatClient(){
+        try{
             System.out.println("connecting...");
-            socket = new Socket("111.229.120.197",port);//在Client端，需要指定host的ip地址和端口
+            socket = new Socket("111.229.120.197",10170);//在Client端，需要指定host的ip地址和端口
             System.out.println("connect successfully.");
-        } catch (IOException e) {
+        } catch (IOException e){
             e.printStackTrace();
-        } finally {
-            return socket;
         }
     }
 
-    public void sendMessage(int port) {
+    public void start(){
         try {
-            socket = connectServer(port);
-            pw = new PrintWriter(socket.getOutputStream(),true);
-            while(true){//设置autoFlush,刷新缓冲区才有输出
-                Scanner scanner = new Scanner(System.in);
-                pw.println(scanner.nextLine());
-            }
-        } catch (IOException e) {
+            GetMsgFromServer getter = new GetMsgFromServer();
+            SendMsgToServer sender = new SendMsgToServer();
+            Thread tg = new Thread(getter);
+            Thread ts = new Thread(sender);
+            tg.start();
+            ts.start();
+        } catch (Exception e){
             e.printStackTrace();
-        } finally {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            pw.close();
         }
     }
 
     public static void main(String[] args) {
         ChatClient MyClient = new ChatClient();
-        System.out.println("input the port:");
-        MyClient.sendMessage(new Scanner(System.in).nextInt());
+        MyClient.start();
+    }
+
+    public void ClientClose(){
+        try {
+            if(count==0 && socket!=null){
+                socket.close();
+                System.out.println("Client has disconnected...");
+                socket = null;
+            }
+            else{
+                count--;
+            }
+        } catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    private class SendMsgToServer implements Runnable{
+        @Override
+        public void run(){
+            try {
+                //socket = connectServer(port);
+                pw = new PrintWriter(socket.getOutputStream(),true);//设置autoFlush,刷新缓冲区才有输出
+                while(true){
+                    Scanner scanner = new Scanner(System.in);
+                    String ClientMessage = scanner.nextLine();
+                    pw.println(ClientMessage);
+                    if(ClientMessage.equals("/logout")){
+                        //客户端 优雅的退出
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                ClientClose();
+                pw.close();
+                //System.out.println("Client has disconnected...");
+            }
+        }
+    }
+
+
+    private class GetMsgFromServer implements Runnable{
+        @Override
+        public void run(){
+            try{
+                InputStream in = socket.getInputStream();
+                InputStreamReader isr = new InputStreamReader(in, StandardCharsets.UTF_8);
+                BufferedReader br = new BufferedReader(isr);
+                String msg;
+                while ((msg=br.readLine())!=null){
+                    if(msg.equals("/logout")) {
+                        break;
+                    }
+                    else{
+                        System.out.println(msg);
+                    }
+                }
+            } catch (IOException e){
+                e.printStackTrace();
+            } finally {
+                ClientClose();
+            }
+        }
     }
 }

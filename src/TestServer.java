@@ -2,7 +2,7 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -12,13 +12,13 @@ public class TestServer {
     //服务端的Socket,是个临时变量
     private Socket soc = null;
     //输出流的list,需要线程安全
-    private CopyOnWriteArrayList<PrintWriter> allOut;
+    private ConcurrentHashMap<Integer,PrintWriter> allOut;
     //构造函数,创建一个ServerSocket,监听10170端口,连接队列为3,同时创建输出流队列
     public TestServer()
     {
         try {
             server = new ServerSocket(10170,3);
-            allOut = new CopyOnWriteArrayList<>();
+            allOut = new ConcurrentHashMap<>();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -41,18 +41,25 @@ public class TestServer {
         return soc;
     }
     //将输出流放到list中
-    private synchronized void addOut(PrintWriter pw){
-        allOut.add(pw);
+    private synchronized void addOut(int num,PrintWriter pw){
+        allOut.put(num,pw);
     }
     //将输出流从list中移除
-    private synchronized void removeOut(PrintWriter pw){
-        allOut.remove(pw);
+    private synchronized void removeOut(int num){
+        allOut.remove(num);
     }
     //广播文本到list中的所有流(考虑不转发给自己)
-    private synchronized void send2All(String s){
-        for (PrintWriter pw:allOut){
-            pw.println(s);
+    private synchronized void send2All(String s,Integer num){
+        for (Integer i:allOut.keySet()){
+            if(!i.equals(num)){
+                allOut.get(i).println(s);
+            }
         }
+    }
+    //转发给指定Socket,暂时只用于登出
+    private synchronized void send2One(String str,Integer num){
+        PrintWriter pw = allOut.get(num);
+        pw.println(str);
     }
     //start方法,服务端从这里开始工作,使用线程池实现多线程连接(?)
     public void start(){
@@ -91,7 +98,7 @@ public class TestServer {
              * 私聊考虑使用HashMap,key为客户端名字,value为对应的输出流
              */
             //这个线程的输出流
-            PrintWriter pw = null;
+            PrintWriter pw;
             try {
                 //获取客户端Socket的输出流
                 if(s.isConnected()){
@@ -99,9 +106,9 @@ public class TestServer {
                     OutputStreamWriter osw = new OutputStreamWriter(out, StandardCharsets.UTF_8);
                     pw = new PrintWriter(osw,true);
                     //添加到服务端的list中
-                    addOut(pw);
+                    addOut(i,pw);
                     //广播该用户上线(后续可以去掉这个)
-                    send2All("Client"+i+" log in.");
+                    send2All("Client"+i+" log in.",-1);
                     //创建一个属于线程的输入流,获取客户端的输入
                     InputStream in = s.getInputStream();
                     InputStreamReader isr = new InputStreamReader(in,StandardCharsets.UTF_8);
@@ -112,7 +119,11 @@ public class TestServer {
                         msg = br.readLine();
                         if(msg!=null){
                             System.out.println("Client" + i + " says: " + msg);
-                            send2All("Client" + i + " says: " + msg);
+                            if(msg.equals("/logout")){
+                                send2One(msg,i);
+                                break;
+                            }
+                            send2All("Client" + i + " says: " + msg,i);
                         }
                     }
                 }
@@ -120,9 +131,9 @@ public class TestServer {
                 e.printStackTrace();
             } finally {
                 //连接断开时,将服务端的Socket close,并且remove对应的pw
-                removeOut(pw);
+                removeOut(i);
                 //广播该客户端离线
-                send2All("Client" + i + " log out.");
+                send2All("Client" + i + " log out.",i);
                 //关闭Socket
                 if(s!=null){
                     try{
