@@ -5,8 +5,7 @@ import java.util.Scanner;
 
 /**
  * @program: XJTU_chatroom
- * @description: only one thread
- * @author: 席卓然
+ * @description: support multithreading,using "/logout" to exit Client
  * @create: 2021-04-13 19:59
  * @version 1.0.0
  **/

@@ -2,10 +2,16 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+//import java.util.concurrent.ThreadPoolExecutor;
 
+/**
+ * @description: support Server's multithreading ,broadcast message to all
+ *               "/exit" to terminate.
+ */
 public class TestServer {
     //服务端的ServerSocket,稳定只有一个
     private ServerSocket server = null;
@@ -13,6 +19,7 @@ public class TestServer {
     private Socket soc = null;
     //输出流的list,需要线程安全
     private ConcurrentHashMap<Integer,PrintWriter> allOut;
+    private ExecutorService es = null;
     //构造函数,创建一个ServerSocket,监听10170端口,连接队列为3,同时创建输出流队列
     public TestServer()
     {
@@ -64,15 +71,23 @@ public class TestServer {
     //start方法,服务端从这里开始工作,使用线程池实现多线程连接(?)
     public void start(){
         try {
-            ExecutorService es = Executors.newFixedThreadPool(4);
-            for (int i=0;i<2;i++){
-                es.submit(new Handler(i, GetSoc()));
-            }
-            es.shutdown();
+            //线程池最大并发数为4，多则在等待队列等待
+            es = Executors.newFixedThreadPool(4);
+            //ThreadPoolExecutor tpe = ((ThreadPoolExecutor) es);
+
+            es.submit(new CloseThread());
+            int userCount=0;//用于标识连接的Client
+            do {
+                //向线程池中添加线程
+                es.submit(new Handler(userCount, GetSoc()));
+                userCount++;
+            } while(true);
+            //es.shutdown();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
     //main方法,调用start()方法
     public static void main(String[] args)
     {
@@ -80,6 +95,7 @@ public class TestServer {
         MainServer.start();
     }
 
+    //Class Handler是与Client通信的一个子线程
     private class Handler implements Runnable {
         //private final String name;
         private final int num;
@@ -158,5 +174,28 @@ public class TestServer {
         }
     }
 
+    //监听服务器端是否关闭的线程--通过键盘输入/exit
+    private class CloseThread implements Runnable {
+        @Override
+        public void run() {
+            Scanner sc = new Scanner(System.in);
+            while(true){
+                if(sc.nextLine().equals("/exit")) {
+                    try {
+                        soc.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    finally {
+                        es.shutdown();
+                        System.exit(0);
+                    }
+                    break;
+                }else {
+                    System.out.println("no exit");
+                }
+            }
+        }
+    }
 }
 
