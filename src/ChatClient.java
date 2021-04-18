@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.Scanner;
 
 /**
@@ -32,19 +33,56 @@ public class ChatClient {
 
     public void start(){
         try {
-            GetMsgFromServer getter = new GetMsgFromServer();
-            SendMsgToServer sender = new SendMsgToServer();
-            Thread tg = new Thread(getter);
-            inc();
-            Thread ts = new Thread(sender);
-            inc();
-            tg.start();
-            ts.start();
-            while (count != 0) Thread.onSpinWait();
-            ClientClose();
+            Integer login = LogIn();
+            if(login.equals(1)){
+                GetMsgFromServer getter = new GetMsgFromServer();
+                SendMsgToServer sender = new SendMsgToServer();
+                Thread tg = new Thread(getter);
+                inc();
+                Thread ts = new Thread(sender);
+                inc();
+                tg.start();
+                ts.start();
+                while (count != 0) Thread.onSpinWait();
+                ClientClose();
+            }
+            else if(login.equals(0)){
+                System.out.println("Wrong password.");
+            }
+            else{
+                System.out.println("Failed.");
+                ClientClose();
+            }
+
         } catch (Exception e){
             e.printStackTrace();
         }
+    }
+
+    public Integer LogIn(){
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("name:");
+        String name = scanner.next();
+        System.out.print("password: ");
+        String pwd = scanner.next();
+        try{
+            PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+            pw.println(name+"`"+pwd);
+            System.out.println("logging in ...");
+            InputStreamReader isr = new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8);
+            BufferedReader br = new BufferedReader(isr);
+            String str = null;
+            while(socket.isConnected()){
+                str=br.readLine();
+                if(str!=null) break;
+            }
+            System.out.println("Get");
+            if(Objects.equals(str, "You are logged in.")) return 1;
+            else if (Objects.equals(str, "Wrong password.")) return 0;
+            else return -1;
+        }catch (IOException e){
+            e.printStackTrace();
+        } return -1;
     }
 
     public synchronized void inc(){
@@ -81,8 +119,8 @@ public class ChatClient {
             try {
                 //socket = connectServer(port);
                 PrintWriter pw = new PrintWriter(socket.getOutputStream(), true);//设置autoFlush,刷新缓冲区才有输出
+                Scanner scanner = new Scanner(System.in);
                 while(true){
-                    Scanner scanner = new Scanner(System.in);
                     String ClientMessage = scanner.nextLine();
                     pw.println(ClientMessage);
                     if(ClientMessage.equals("/logout")){
