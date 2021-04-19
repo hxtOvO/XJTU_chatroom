@@ -107,6 +107,7 @@ public class ChatClient extends JFrame {
         ta_show = new JTextPane();
         attrset = new SimpleAttributeSet();
         StyleConstants.setFontSize(attrset,14);
+        StyleConstants.setFontFamily(attrset,"黑体");
         scrollPaneRight.setViewportView(ta_show);
 
         final JScrollPane scrollPaneLeft = new JScrollPane();
@@ -272,7 +273,7 @@ public class ChatClient extends JFrame {
 
                 Document docs = ta_show.getDocument();
                 try {
-                    docs.insertString(docs.getLength()," "+userName+" "+date+" "+timeString+"： \n "+ ClientMessage +"\n ",attrset);
+                    docs.insertString(docs.getLength(),userName+" "+date+" "+timeString+"： \n "+ ClientMessage +"\n ",attrset);
                 } catch (BadLocationException e) {
                     e.printStackTrace();
                 }
