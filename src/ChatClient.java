@@ -175,6 +175,8 @@ public class ChatClient extends JFrame {
                     //传输username和password到服务器端
                     ChatConnect();
                     //这部分说明登录成功可以交给服务器端，这里只是用来测试
+                    //在这里新建一个发送消息的进程，发送用户名和密码，等待接受logFlag
+                    //->成功
                     Document document = ta_show.getDocument();
                     try {
                         document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
@@ -182,6 +184,7 @@ public class ChatClient extends JFrame {
                         badLocationException.printStackTrace();
                     }
                     jDialog.dispose();
+                    //->密码不匹配->弹出提示框
                 }
             });
             c.add(login);
@@ -194,7 +197,7 @@ public class ChatClient extends JFrame {
         }
 
         public String getPassword(){
-            return keyIn != null ? keyIn.getText() : null;
+            return keyIn != null ? String.valueOf(keyIn.getPassword()) : null;
         }
     }
 
@@ -206,12 +209,7 @@ public class ChatClient extends JFrame {
             //SendMsgToServer sender = new SendMsgToServer();
             Thread tg = new Thread(getter);
             inc();
-            //Thread ts = new Thread(sender);
-            //inc();
             tg.start();
-            //ts.start();
-            //while (count != 0) Thread.onSpinWait();
-            //ClientClose();
         } catch (Exception e){
             e.printStackTrace();
         }
