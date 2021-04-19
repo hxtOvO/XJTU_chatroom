@@ -11,7 +11,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.Objects;
 
 /**
  * @program: XJTU_chatroom
@@ -37,6 +36,7 @@ public class ChatClient extends JFrame {
             System.out.println("connecting...");
             socket = new Socket("111.229.120.197",10170);//在Client端，需要指定host的ip地址和端口
             System.out.println("connect successfully.");
+            start();
         } catch (IOException e){
             e.printStackTrace();
         }
@@ -77,17 +77,20 @@ public class ChatClient extends JFrame {
         panel.add(tf_send);
 
         final JButton button = new JButton();
-        button.addActionListener(e -> {
-            //点击发送button，新建一个发送线程并加入到就绪队列
-            if(socket != null)
-            {
-                SendMsgToServer sender1 = new SendMsgToServer();
-                Thread thread = new Thread(sender1);
-                thread.start();
-            } else {
-                JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
-            }
+        button.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                //点击发送button，新建一个发送线程并加入到就绪队列
+                if(socket != null)
+                {
+                    SendMsgToServer sender1 = new SendMsgToServer();
+                    Thread thread = new Thread(sender1);
+                    thread.start();
+                } else {
+                    JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
+                }
 
+            }
         });
         button.setText("发送");
         panel.add(button);
@@ -117,10 +120,13 @@ public class ChatClient extends JFrame {
         getContentPane().add(userPanel,BorderLayout.NORTH);
 
         final JButton button_login = new JButton();
-        //打开登录界面
-        button_login.addActionListener(e -> {
-            //登录时，传输用户名与密码到服务器端
-            new loginDialog().createLoginDialog();
+        button_login.addActionListener(new ActionListener() {
+            @Override
+            //打开登录界面
+            public void actionPerformed(ActionEvent e) {
+                //登录时，传输用户名与密码到服务器端
+                new loginDialog().createLoginDialog();
+            }
         });
         button_login.setText("登录");
         userPanel.add(button_login);
@@ -163,28 +169,22 @@ public class ChatClient extends JFrame {
             JButton login = new JButton();
             login.setText("登录");
             login.setBounds(225 ,100,100,20);
-            login.addActionListener(e -> {
-                //传输username和password到服务器端
-                ChatConnect();
-                Integer logAuth = LogIn();
-                //这部分说明登录成功可以交给服务器端，这里只是用来测试
-                if(logAuth==1){
+            login.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    //传输username和password到服务器端
+                    ChatConnect();
+                    //这部分说明登录成功可以交给服务器端，这里只是用来测试
+                    //在这里新建一个发送消息的进程，发送用户名和密码，等待接受logFlag
+                    //->成功
                     Document document = ta_show.getDocument();
                     try {
                         document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
                     } catch (BadLocationException badLocationException) {
                         badLocationException.printStackTrace();
                     }
-                    start();
                     jDialog.dispose();
-                }else{
-                    if(logAuth==0){
-                        JOptionPane.showMessageDialog(jDialog,"密码错误！","提示",JOptionPane.ERROR_MESSAGE);
-                    }
-                    else if(logAuth==-1){
-                        JOptionPane.showMessageDialog(jDialog,"未知错误！","提示",JOptionPane.ERROR_MESSAGE);
-                    }
-                    ClientClose();
+                    //->密码不匹配->弹出提示框
                 }
             });
             c.add(login);
@@ -192,34 +192,13 @@ public class ChatClient extends JFrame {
             jDialog.setVisible(true);
         }
 
-        public Integer LogIn(){
-            String name = getUsername();
-            String pwd = getPassword();
-            try{
-                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
-                pw.println(name+"`"+pwd);
-                System.out.println("logging in ...");
-                InputStreamReader isr = new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8);
-                BufferedReader br = new BufferedReader(isr);
-                String str = null;
-                while(socket.isConnected()){
-                    str=br.readLine();
-                    if(str!=null) break;
-                }
-                System.out.println("Get");
-                if(Objects.equals(str, "1")) return 1;
-                else if (Objects.equals(str, "0")) return 0;
-                else return -1;
-            }catch (IOException e){
-                e.printStackTrace();
-            } return -1;
-        }
-
         public String getUsername(){
             return userIn != null ? userIn.getText() : null;
         }
 
-        public String getPassword(){ return keyIn != null ? String.valueOf(keyIn.getPassword()) : null; }
+        public String getPassword(){
+            return keyIn != null ? String.valueOf(keyIn.getPassword()) : null;
+        }
     }
 
 
@@ -227,6 +206,7 @@ public class ChatClient extends JFrame {
     public void start(){
         try {
             GetMsgFromServer getter = new GetMsgFromServer();
+            //SendMsgToServer sender = new SendMsgToServer();
             Thread tg = new Thread(getter);
             inc();
             tg.start();
@@ -245,9 +225,12 @@ public class ChatClient extends JFrame {
 
     //主方法
     public static void main(String[] args) {
-        EventQueue.invokeLater(() -> {
-            ChatClient MyClientFrame = new ChatClient();
-            MyClientFrame.setVisible(true);
+        EventQueue.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                ChatClient MyClientFrame = new ChatClient();
+                MyClientFrame.setVisible(true);
+            }
         });
     }
 
