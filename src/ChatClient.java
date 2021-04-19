@@ -77,20 +77,17 @@ public class ChatClient extends JFrame {
         panel.add(tf_send);
 
         final JButton button = new JButton();
-        button.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                //点击发送button，新建一个发送线程并加入到就绪队列
-                if(socket != null)
-                {
-                    SendMsgToServer sender1 = new SendMsgToServer();
-                    Thread thread = new Thread(sender1);
-                    thread.start();
-                } else {
-                    JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
-                }
-
+        button.addActionListener(e -> {
+            //点击发送button，新建一个发送线程并加入到就绪队列
+            if(socket != null)
+            {
+                SendMsgToServer sender1 = new SendMsgToServer();
+                Thread thread = new Thread(sender1);
+                thread.start();
+            } else {
+                JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
             }
+
         });
         button.setText("发送");
         panel.add(button);
@@ -120,13 +117,10 @@ public class ChatClient extends JFrame {
         getContentPane().add(userPanel,BorderLayout.NORTH);
 
         final JButton button_login = new JButton();
-        button_login.addActionListener(new ActionListener() {
-            @Override
-            //打开登录界面
-            public void actionPerformed(ActionEvent e) {
-                //登录时，传输用户名与密码到服务器端
-                new loginDialog().createLoginDialog();
-            }
+        //打开登录界面
+        button_login.addActionListener(e -> {
+            //登录时，传输用户名与密码到服务器端
+            new loginDialog().createLoginDialog();
         });
         button_login.setText("登录");
         userPanel.add(button_login);
@@ -169,20 +163,17 @@ public class ChatClient extends JFrame {
             JButton login = new JButton();
             login.setText("登录");
             login.setBounds(225 ,100,100,20);
-            login.addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    //传输username和password到服务器端
-                    ChatConnect();
-                    //这部分说明登录成功可以交给服务器端，这里只是用来测试
-                    Document document = ta_show.getDocument();
-                    try {
-                        document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
-                    } catch (BadLocationException badLocationException) {
-                        badLocationException.printStackTrace();
-                    }
-                    jDialog.dispose();
+            login.addActionListener(e -> {
+                //传输username和password到服务器端
+                ChatConnect();
+                //这部分说明登录成功可以交给服务器端，这里只是用来测试
+                Document document = ta_show.getDocument();
+                try {
+                    document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
+                } catch (BadLocationException badLocationException) {
+                    badLocationException.printStackTrace();
                 }
+                jDialog.dispose();
             });
             c.add(login);
 
@@ -203,15 +194,9 @@ public class ChatClient extends JFrame {
     public void start(){
         try {
             GetMsgFromServer getter = new GetMsgFromServer();
-            //SendMsgToServer sender = new SendMsgToServer();
             Thread tg = new Thread(getter);
             inc();
-            //Thread ts = new Thread(sender);
-            //inc();
             tg.start();
-            //ts.start();
-            //while (count != 0) Thread.onSpinWait();
-            //ClientClose();
         } catch (Exception e){
             e.printStackTrace();
         }
@@ -227,12 +212,9 @@ public class ChatClient extends JFrame {
 
     //主方法
     public static void main(String[] args) {
-        EventQueue.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                ChatClient MyClientFrame = new ChatClient();
-                MyClientFrame.setVisible(true);
-            }
+        EventQueue.invokeLater(() -> {
+            ChatClient MyClientFrame = new ChatClient();
+            MyClientFrame.setVisible(true);
         });
     }
 
