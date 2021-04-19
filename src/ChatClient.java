@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.Objects;
 
 /**
  * @program: XJTU_chatroom
@@ -36,7 +37,6 @@ public class ChatClient extends JFrame {
             System.out.println("connecting...");
             socket = new Socket("111.229.120.197",10170);//在Client端，需要指定host的ip地址和端口
             System.out.println("connect successfully.");
-            start();
         } catch (IOException e){
             e.printStackTrace();
         }
@@ -166,27 +166,60 @@ public class ChatClient extends JFrame {
             login.addActionListener(e -> {
                 //传输username和password到服务器端
                 ChatConnect();
+                Integer logAuth = LogIn();
                 //这部分说明登录成功可以交给服务器端，这里只是用来测试
-                Document document = ta_show.getDocument();
-                try {
-                    document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
-                } catch (BadLocationException badLocationException) {
-                    badLocationException.printStackTrace();
+                if(logAuth==1){
+                    Document document = ta_show.getDocument();
+                    try {
+                        document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
+                    } catch (BadLocationException badLocationException) {
+                        badLocationException.printStackTrace();
+                    }
+                    start();
+                    jDialog.dispose();
+                }else{
+                    if(logAuth==0){
+                        JOptionPane.showMessageDialog(jDialog,"密码错误！","提示",JOptionPane.ERROR_MESSAGE);
+                    }
+                    else if(logAuth==-1){
+                        JOptionPane.showMessageDialog(jDialog,"未知错误！","提示",JOptionPane.ERROR_MESSAGE);
+                    }
+                    ClientClose();
                 }
-                jDialog.dispose();
             });
             c.add(login);
 
             jDialog.setVisible(true);
         }
 
+        public Integer LogIn(){
+            String name = getUsername();
+            String pwd = getPassword();
+            try{
+                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                pw.println(name+"`"+pwd);
+                System.out.println("logging in ...");
+                InputStreamReader isr = new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8);
+                BufferedReader br = new BufferedReader(isr);
+                String str = null;
+                while(socket.isConnected()){
+                    str=br.readLine();
+                    if(str!=null) break;
+                }
+                System.out.println("Get");
+                if(Objects.equals(str, "1")) return 1;
+                else if (Objects.equals(str, "0")) return 0;
+                else return -1;
+            }catch (IOException e){
+                e.printStackTrace();
+            } return -1;
+        }
+
         public String getUsername(){
             return userIn != null ? userIn.getText() : null;
         }
 
-        public String getPassword(){
-            return keyIn != null ? keyIn.getText() : null;
-        }
+        public String getPassword(){ return keyIn != null ? String.valueOf(keyIn.getPassword()) : null; }
     }
 
 
