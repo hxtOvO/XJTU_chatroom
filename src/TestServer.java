@@ -28,7 +28,6 @@ public class TestServer {
             server = new ServerSocket(10170,3);
             allOut = new ConcurrentHashMap<>();
             DBServer = new SQLServer();
-            DBServer.CreateOnlineClient();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -132,17 +131,17 @@ public class TestServer {
                 if(Auth.equals(1)) {
                     //密码正确,回应登录成功,并将状态更改为true
                     GetServerDB().ChangeOnline(name,true,num);
-                    send2One("You are logged in.", num);
+                    send2One("1", num);
                     send2All(name+" log in.",num);
                 }
                 else if(Auth.equals(0)) {
                     //新用户的处理
                     GetServerDB().AddClient(name, pw, num);
-                    send2One("You are logged in.",num);
+                    send2One("1",num);
                     send2All(name+" log in.",num);
                 }
                 else if(Auth.equals(-1)){
-                    send2One("Wrong password.",num);
+                    send2One("0",num);
                     try{
                         s.close();
                     }catch (IOException e){
@@ -163,9 +162,10 @@ public class TestServer {
         //登录成功后,发送在线用户名单
         public void SendOnlineStatus(){
             String str = GetOnce();
-            if(str.equals("request_for_onlineUser")) {
-                send2One(GetServerDB().GetOnlineStatus(), num);
+            while(!str.equals("request_for_onlineUser")){
+                str = GetOnce();
             }
+            send2One(GetServerDB().GetOnlineStatus(), num);
         }
         //一个可以复用的方法,接收一次输入流的数据
         public String GetOnce(){
@@ -212,12 +212,13 @@ public class TestServer {
                             String[] tMsg = new String[2];
                             tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);
                             tMsg[1] = msg.substring(msg.indexOf(":"));
-                            if(tMsg[0].equals("All")){ send2All(name + " says: " + msg,i); }
+                            if(tMsg[0].equals("All")){ send2All(name + " says: " + tMsg[1],i); }
                             else{
                                 Integer des = DBServer.FindNum(tMsg[0]);
                                 if(des>=0) { send2One(name + "says: "+tMsg[1],des); }
                             }
-                            }
+                            System.out.println(name + " says: " + msg);
+                        }
                     }
                 }
             } catch (IOException e) {
