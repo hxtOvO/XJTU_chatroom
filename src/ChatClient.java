@@ -6,11 +6,13 @@ import javax.swing.text.StyleConstants;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
-import java.util.Date;
+import java.util.*;
 
 /**
  * @program: XJTU_chatroom
@@ -25,6 +27,10 @@ public class ChatClient extends JFrame {
     private final JTextField tf_send;
     private final SimpleAttributeSet attrset;
     private final JTextPane ta_show;
+    private final JList user_list;
+    private Vector<String> user_online;
+    private int userIndex = -1;
+    private String username;
     /**
      * 客户端的动作：
      * sendMessage/readMessage/connectServer/
@@ -36,7 +42,6 @@ public class ChatClient extends JFrame {
             System.out.println("connecting...");
             socket = new Socket("111.229.120.197",10170);//在Client端，需要指定host的ip地址和端口
             System.out.println("connect successfully.");
-            start();
         } catch (IOException e){
             e.printStackTrace();
         }
@@ -77,27 +82,24 @@ public class ChatClient extends JFrame {
         panel.add(tf_send);
 
         final JButton button = new JButton();
-        button.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                //点击发送button，新建一个发送线程并加入到就绪队列
-                if(socket != null)
-                {
-                    SendMsgToServer sender1 = new SendMsgToServer();
-                    Thread thread = new Thread(sender1);
-                    thread.start();
-                } else {
-                    JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
-                }
-
+        button.addActionListener(e -> {
+            //点击发送button，新建一个发送线程并加入到就绪队列
+            if(socket != null)
+            {
+                SendMsgToServer sender1 = new SendMsgToServer();
+                Thread thread = new Thread(sender1);
+                thread.start();
+            } else {
+                JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
             }
+
         });
         button.setText("发送");
         panel.add(button);
 
         //将主窗口分为左右两部分
         final JSplitPane splitPane = new JSplitPane();
-        splitPane.setDividerLocation(100);
+        splitPane.setDividerLocation(150);
         getContentPane().add(splitPane,BorderLayout.CENTER);
 
         //分割后的右部用来展示聊天框，设置为滚动
@@ -113,6 +115,33 @@ public class ChatClient extends JFrame {
         final JScrollPane scrollPaneLeft = new JScrollPane();
         splitPane.setLeftComponent(scrollPaneLeft);
 
+        //获得在线名单，debug先用个给定的
+        //user_online = getOnlineList();
+        user_online = new Vector<String>(10);
+//        user_online.add("deyang");
+        //user_online.add("test01");
+//        user_online.add("root");
+
+        user_list = new JList();
+        user_list.setListData(user_online);
+        user_list.setBorder(BorderFactory.createTitledBorder("当前在线用户名单"));
+        user_list.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                super.mouseClicked(e);
+                userIndex = user_list.getSelectedIndex();//获得当前选择的下标
+                Document docs = ta_show.getDocument();
+                try {
+                    docs.insertString(docs.getLength(),"switch to "+user_online.elementAt(userIndex)+" \n",attrset);
+                } catch (BadLocationException er) {
+                    er.printStackTrace();
+                }
+            }
+        });
+
+        scrollPaneLeft.setViewportView(user_list);
+
+
         /*
           用户登录界面
          */
@@ -120,19 +149,52 @@ public class ChatClient extends JFrame {
         getContentPane().add(userPanel,BorderLayout.NORTH);
 
         final JButton button_login = new JButton();
-        button_login.addActionListener(new ActionListener() {
-            @Override
-            //打开登录界面
-            public void actionPerformed(ActionEvent e) {
-                //登录时，传输用户名与密码到服务器端
-                new loginDialog().createLoginDialog();
-            }
+        //打开登录界面
+        button_login.addActionListener(e -> {
+            //登录时，传输用户名与密码到服务器端
+            new loginDialog().createLoginDialog();
         });
         button_login.setText("登录");
         userPanel.add(button_login);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         //居中
         setLocationRelativeTo(null);
+    }
+
+    //String -> Vector
+//    public Vector<String> toVector(String s){
+//        //Vector<String> v = new Vector<String>(Arrays.asList(s.split("`")));
+//        return new Vector<String>(Arrays.asList(s.split("`")));
+//    }
+
+    //请求服务器获得在线名单 -> Vector
+    public Vector<String> getOnlineList(){
+        String str = null;
+        try {
+            PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+            pw.println("request_for_onlineUser");//向服务器发请求
+            System.out.println("getting online list..");
+            InputStreamReader isr = new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8);
+            BufferedReader br = new BufferedReader(isr);
+            //String str = null;
+            //读返回的在线名单
+            while(socket.isConnected()){
+                str=br.readLine();
+                if(str!=null) break;//阻塞循环直到读取到在线名单
+            }
+            System.out.println("Get");
+            System.out.println(str);
+
+        } catch (IOException e){
+            e.printStackTrace();
+        } finally {
+            Vector<String> user = new Vector<String>(Arrays.asList(str.split("`")));
+//            for(String ss : user){
+//                System.err.print(ss);
+//            }
+            return user;
+        }
+
     }
 
     //登录界面的类
@@ -169,22 +231,33 @@ public class ChatClient extends JFrame {
             JButton login = new JButton();
             login.setText("登录");
             login.setBounds(225 ,100,100,20);
-            login.addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    //传输username和password到服务器端
-                    ChatConnect();
-                    //这部分说明登录成功可以交给服务器端，这里只是用来测试
-                    //在这里新建一个发送消息的进程，发送用户名和密码，等待接受logFlag
-                    //->成功
+            login.addActionListener(e -> {
+                //传输username和password到服务器端
+                ChatConnect();
+                Integer logAuth = LogIn();
+                //检测是否登录成功
+                if(logAuth==1){
+                    //登录成功，获得当前在线名单
+                    user_online = getOnlineList();
+                    user_list.setListData(user_online);
+                    user_list.updateUI();
+                    username = userIn.getText();
                     Document document = ta_show.getDocument();
                     try {
                         document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
                     } catch (BadLocationException badLocationException) {
                         badLocationException.printStackTrace();
                     }
+                    start();
                     jDialog.dispose();
-                    //->密码不匹配->弹出提示框
+                }else{
+                    if(logAuth==0){
+                        JOptionPane.showMessageDialog(jDialog,"密码错误！","提示",JOptionPane.ERROR_MESSAGE);
+                    }
+                    else if(logAuth==-1){
+                        JOptionPane.showMessageDialog(jDialog,"未知错误！","提示",JOptionPane.ERROR_MESSAGE);
+                    }
+                    ClientClose();
                 }
             });
             c.add(login);
@@ -192,13 +265,34 @@ public class ChatClient extends JFrame {
             jDialog.setVisible(true);
         }
 
+        public Integer LogIn(){
+            String name = getUsername();
+            String pwd = getPassword();
+            try{
+                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                pw.println(name+"`"+pwd);
+                System.out.println("logging in ...");
+                InputStreamReader isr = new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8);
+                BufferedReader br = new BufferedReader(isr);
+                String str = null;
+                while(socket.isConnected()){
+                    str=br.readLine();
+                    if(str!=null) break;
+                }
+                System.out.println("Get");
+                if(Objects.equals(str, "1")) return 1;
+                else if (Objects.equals(str, "0")) return 0;
+                else return -1;
+            }catch (IOException e){
+                e.printStackTrace();
+            } return -1;
+        }
+
         public String getUsername(){
             return userIn != null ? userIn.getText() : null;
         }
 
-        public String getPassword(){
-            return keyIn != null ? String.valueOf(keyIn.getPassword()) : null;
-        }
+        public String getPassword(){ return keyIn != null ? String.valueOf(keyIn.getPassword()) : null; }
     }
 
 
@@ -206,7 +300,6 @@ public class ChatClient extends JFrame {
     public void start(){
         try {
             GetMsgFromServer getter = new GetMsgFromServer();
-            //SendMsgToServer sender = new SendMsgToServer();
             Thread tg = new Thread(getter);
             inc();
             tg.start();
@@ -225,12 +318,9 @@ public class ChatClient extends JFrame {
 
     //主方法
     public static void main(String[] args) {
-        EventQueue.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                ChatClient MyClientFrame = new ChatClient();
-                MyClientFrame.setVisible(true);
-            }
+        EventQueue.invokeLater(() -> {
+            ChatClient MyClientFrame = new ChatClient();
+            MyClientFrame.setVisible(true);
         });
     }
 
@@ -238,6 +328,12 @@ public class ChatClient extends JFrame {
         try {
             if(count==0 && socket!=null){
                 socket.close();
+                tf_send.setText(null);
+                ta_show.setText("");
+                user_online.clear();
+                user_list.setListData(user_online);
+
+
                 System.out.println("Client has disconnected...");
                 socket = null;
             }
@@ -260,31 +356,32 @@ public class ChatClient extends JFrame {
 
                 //改为从tf_send获得消息
                 String ClientMessage = tf_send.getText();
-                pw.println(ClientMessage);
 
-                DateFormat dateFormat = DateFormat.getDateInstance();
-                String date = dateFormat.format(new Date());
-                dateFormat = DateFormat.getTimeInstance(DateFormat.MEDIUM);
-                String timeString = dateFormat.format(new Date());
-                String userName = "我";
-
-
-                Document docs = ta_show.getDocument();
-                try {
-                    docs.insertString(docs.getLength(),userName+" "+date+" "+timeString+"： \n "+ ClientMessage +"\n ",attrset);
-                } catch (BadLocationException e) {
-                    e.printStackTrace();
-                }
-                //ta_show.setLineWrap(true);
-
-                tf_send.setText(null);
-                tf_send.requestFocus();
-                //System.out.println(ClientMessage);
+                //登出的消息不加头部
                 if(ClientMessage.equals("/logout")){
                     //客户端 优雅的退出
+                    pw.println(ClientMessage);
                     ClientClose();
                     JOptionPane.showMessageDialog(null,"您已登出！","提示",JOptionPane.PLAIN_MESSAGE);
 
+                } else {
+                    //常规消息，格式为：@name:ClientMessage
+                    pw.println("@"+user_online.elementAt(userIndex)+":"+ClientMessage);
+
+                    DateFormat dateFormat = DateFormat.getDateInstance();
+                    String date = dateFormat.format(new Date());
+                    dateFormat = DateFormat.getTimeInstance(DateFormat.MEDIUM);
+                    String timeString = dateFormat.format(new Date());
+                    //String userName = "我";
+
+                    Document docs = ta_show.getDocument();
+                    try {
+                        docs.insertString(docs.getLength(),username+" "+date+" "+timeString+" to "+user_online.elementAt(userIndex)+"： \n"+ ClientMessage +"\n",attrset);
+                    } catch (BadLocationException e) {
+                        e.printStackTrace();
+                    }
+                    tf_send.setText(null);
+                    tf_send.requestFocus();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -307,23 +404,32 @@ public class ChatClient extends JFrame {
                         break;
                     }
                     else{
-                        System.out.println(msg);
+                        //System.out.println(msg);
                         //将接收到的消息显示出来：(目前不考虑时间)
                         Document docs = ta_show.getDocument();
-                        if(msg.contains("says")) {
-                            //是消息内容
+                        if(msg.startsWith("@")) {
+                            String[] ss = msg.split(":");
+                            //是消息内容 @name:msg
                             try {
-                                docs.insertString(docs.getLength() , msg +"\n ", attrset);
+                                docs.insertString(docs.getLength() , ss[0] +" says: "+ss[1], attrset);
                             } catch (BadLocationException e) {
                                 e.printStackTrace();
                             }
-                        } else {//是登录/登出消息
+                        } else {//是登录/登出消息:name log in./out.
                             StyleConstants.setBold(attrset , true);
                             StyleConstants.setFontSize(attrset,10);
                             try {
-                                docs.insertString(docs.getLength() , msg +"\n ", attrset);
-                            } catch (BadLocationException e) {
-                                e.printStackTrace();
+                                //docs.insertString(docs.getLength() , msg +"\n ", attrset);
+
+                                String[] ss = msg.split("\\s+");
+                                if(ss[2].equals("in.")){
+                                    System.out.println("adding "+ss[0]);
+                                    user_online.add(ss[0]);
+                                } else if(ss[2].equals("out.")){
+                                    user_online.remove(ss[0]);
+                                }
+                                //刷新user_online列表
+                                user_list.updateUI();
                             } finally {
                                 StyleConstants.setBold(attrset , false);
                                 StyleConstants.setFontSize(attrset,14);
