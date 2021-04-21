@@ -4,8 +4,7 @@ import javax.swing.text.Document;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.*;
@@ -16,9 +15,9 @@ import java.util.*;
 
 /**
  * @program: XJTU_chatroom
- * @description: GUI with Swing
+ * @description: 实现私聊，实现维护个人聊天界面记录，实现动态维护在线名单
  * @create: 2021-04-13 19:59
- * @version 2.0.0
+ * @version 3.0.0
  **/
 
 public class ChatClient extends JFrame {
@@ -26,16 +25,12 @@ public class ChatClient extends JFrame {
     private volatile int count = 0;
     private final JTextField tf_send;
     private final SimpleAttributeSet attrset;
-    private final JTextPane ta_show;
+    private JTextPane ta_show;
     private final JList user_list;
     private Vector<String> user_online;
     private int userIndex = -1;
     private String username;
-    /**
-     * 客户端的动作：
-     * sendMessage/readMessage/connectServer/
-     * disconnect
-     */
+    private HashMap<String,JTextPane> ChatWindowsMap;
 
     public void ChatConnect(){
         try{
@@ -115,12 +110,8 @@ public class ChatClient extends JFrame {
         final JScrollPane scrollPaneLeft = new JScrollPane();
         splitPane.setLeftComponent(scrollPaneLeft);
 
-        //获得在线名单，debug先用个给定的
-        //user_online = getOnlineList();
-        user_online = new Vector<String>(10);
-//        user_online.add("deyang");
-        //user_online.add("test01");
-//        user_online.add("root");
+        //获得在线名单
+        user_online = new Vector<>(10);
 
         user_list = new JList();
         user_list.setListData(user_online);
@@ -130,12 +121,16 @@ public class ChatClient extends JFrame {
             public void mouseClicked(MouseEvent e) {
                 super.mouseClicked(e);
                 userIndex = user_list.getSelectedIndex();//获得当前选择的下标
-                Document docs = ta_show.getDocument();
-                try {
-                    docs.insertString(docs.getLength(),"switch to "+user_online.elementAt(userIndex)+" \n",attrset);
-                } catch (BadLocationException er) {
-                    er.printStackTrace();
-                }
+                //在name-JTextPane的键对中找到选定name对应的JTextPane,将RightPane赋值给他
+                //其实这里相当于构建Document了，把对应的Document放进ta_show
+                ta_show.setDocument(ChatWindowsMap.get(user_online.elementAt(userIndex)).getDocument());
+
+//                Document docs = ta_show.getDocument();
+//                try {
+//                    docs.insertString(docs.getLength(),"switch to "+user_online.elementAt(userIndex)+" \n",attrset);
+//                } catch (BadLocationException er) {
+//                    er.printStackTrace();
+//                }
             }
         });
 
@@ -161,12 +156,6 @@ public class ChatClient extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    //String -> Vector
-//    public Vector<String> toVector(String s){
-//        //Vector<String> v = new Vector<String>(Arrays.asList(s.split("`")));
-//        return new Vector<String>(Arrays.asList(s.split("`")));
-//    }
-
     //请求服务器获得在线名单 -> Vector
     public Vector<String> getOnlineList(){
         String str = null;
@@ -188,11 +177,8 @@ public class ChatClient extends JFrame {
         } catch (IOException e){
             e.printStackTrace();
         } finally {
-            Vector<String> user = new Vector<String>(Arrays.asList(str.split("`")));
-//            for(String ss : user){
-//                System.err.print(ss);
-//            }
-            return user;
+            assert str != null;
+            return new Vector<>(Arrays.asList(str.split("`")));
         }
 
     }
@@ -240,6 +226,12 @@ public class ChatClient extends JFrame {
                     //登录成功，获得当前在线名单
                     user_online = getOnlineList();
                     user_list.setListData(user_online);
+                    //获得在线名单后，建立name与JTextPane的HashMap
+                    ChatWindowsMap = new HashMap<>();
+                    for(String ss : user_online){
+                        ChatWindowsMap.put(ss,new JTextPane());
+                    }
+
                     user_list.updateUI();
                     username = userIn.getText();
                     Document document = ta_show.getDocument();
@@ -406,12 +398,16 @@ public class ChatClient extends JFrame {
                     else{
                         //System.out.println(msg);
                         //将接收到的消息显示出来：(目前不考虑时间)
-                        Document docs = ta_show.getDocument();
+                        //Document docs = ta_show.getDocument();
                         if(msg.startsWith("@")) {
-                            String[] ss = msg.split(":");
+                            String str = msg.substring(1);
+                            String[] ss = str.split(":");
                             //是消息内容 @name:msg
                             try {
+                                System.out.println(ss[0]+" says "+ss[1]);
+                                Document docs = ChatWindowsMap.get(ss[0]).getDocument();
                                 docs.insertString(docs.getLength() , ss[0] +" says: "+ss[1], attrset);
+                                //ta_show.setDocument(docs);
                             } catch (BadLocationException e) {
                                 e.printStackTrace();
                             }
@@ -419,16 +415,17 @@ public class ChatClient extends JFrame {
                             StyleConstants.setBold(attrset , true);
                             StyleConstants.setFontSize(attrset,10);
                             try {
-                                //docs.insertString(docs.getLength() , msg +"\n ", attrset);
-
                                 String[] ss = msg.split("\\s+");
                                 if(ss[2].equals("in.")){
                                     System.out.println("adding "+ss[0]);
                                     user_online.add(ss[0]);
+                                    ChatWindowsMap.put(ss[0],new JTextPane());
                                 } else if(ss[2].equals("out.")){
                                     user_online.remove(ss[0]);
+                                    ChatWindowsMap.remove(ss[0]);
                                 }
                                 //刷新user_online列表
+                                user_list.setListData(user_online);
                                 user_list.updateUI();
                             } finally {
                                 StyleConstants.setBold(attrset , false);
