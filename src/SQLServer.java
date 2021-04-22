@@ -17,7 +17,7 @@ public class SQLServer {
     //登录验证方法,执行一个查询
     public Integer LogInAuth(String name,String pw){
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            try (PreparedStatement ps=conn.prepareStatement("SELECT * from Clients WHERE name = ?")){
+            try (PreparedStatement ps=conn.prepareStatement("SELECT password from Clients WHERE name = ?")){
                 ps.setObject(1,name);
                 try(ResultSet rs = ps.executeQuery()){
                     if(rs.next()){
@@ -35,39 +35,22 @@ public class SQLServer {
     //添加一个新用户,并将其设置为在线
     public void AddClient(String name,String pw,Integer num){
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            try(PreparedStatement ps=conn.prepareStatement("INSERT INTO Clients (name, password) VALUES (?,?)")){
+            try(PreparedStatement ps=conn.prepareStatement("INSERT INTO Clients (name, password, flag, num) VALUES (?,?,?,?)")){
                 ps.setObject(1,name);
                 ps.setObject(2,pw);
+                ps.setObject(3,true);
+                ps.setObject(4,num);
                 ps.executeUpdate();
-                try(PreparedStatement ups=conn.prepareStatement("INSERT INTO Online (name,flag,num) VALUES (?,?,?)")){
-                    ups.setObject(1,name);
-                    ups.setObject(2,true);
-                    ups.setObject(3,num);
-                    ups.executeUpdate();
-                }
             }
         }catch (SQLException se){
             se.printStackTrace();
         }
     }
-    //建一个在线用户的表,表名为Online
-    public void CreateOnlineClient(){
-        try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            String sql = "CREATE TABLE Online"+
-                    "(name VARCHAR(20) NOT NULL," +
-                    "flag boolean," +
-                    "num INTEGER," +
-                    "PRIMARY KET(name)";
-            try(PreparedStatement ps=conn.prepareStatement(sql)){
-                ps.executeUpdate();
-            }
-        }catch (SQLException se){se.printStackTrace();}
-    }
     //更新用户在线状态的方法
     public void ChangeOnline(String name, boolean flag, Integer num){
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            String sql = "UPDATE Online" +
-                    "SET flag = ?, num = ?" +
+            String sql = "UPDATE Clients " +
+                    "SET flag = ?, num = ? " +
                     "WHERE name = ?";
             try (PreparedStatement ps=conn.prepareStatement(sql)){
                 ps.setObject(1,flag);
@@ -77,14 +60,14 @@ public class SQLServer {
                 ps.executeUpdate();
             }
         }catch (SQLException se){
-                se.printStackTrace();
-            }
+            se.printStackTrace();
+        }
     }
     //获取全部用户在线状态的方法
     public String GetOnlineStatus(){
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            String sql = "SELECT name" +
-                    "FROM Online" +
+            String sql = "SELECT name " +
+                    "FROM Clients " +
                     "WHERE flag = true";
             try (Statement stmt=conn.createStatement()){
                 try(ResultSet rs= stmt.executeQuery(sql)){
@@ -104,7 +87,7 @@ public class SQLServer {
     //获取name对应的num,执行一个查询
     public Integer FindNum(String name){
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            try (PreparedStatement ps=conn.prepareStatement("SELECT flag, num from Online WHERE name = ?")){
+            try (PreparedStatement ps=conn.prepareStatement("SELECT flag, num from Clients WHERE name = ?")){
                 ps.setObject(1,name);
                 try(ResultSet rs = ps.executeQuery()){
                     if(rs.next() && rs.getBoolean("flag")){
@@ -117,5 +100,16 @@ public class SQLServer {
             se.printStackTrace();
         }
         return -2;
+    }
+    //关闭服务端时将所有客户端都设为离线
+    public void ServerClose()
+    {
+        try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
+            String sql = "UPDATE Clients" +
+                    "SET flag = false, num = null";
+            try(Statement stmt=conn.createStatement()){
+                stmt.executeUpdate(sql);
+            }
+        }catch (SQLException se){se.printStackTrace();}
     }
 }
