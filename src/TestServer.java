@@ -7,7 +7,6 @@ import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-//import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * @description: support Server's multithreading ,broadcast message to all
@@ -24,8 +23,7 @@ public class TestServer {
     //服务器的数据库
     SQLServer DBServer = null;
     //构造函数,创建一个ServerSocket,监听10170端口,连接队列为3,同时创建输出流队列
-    public TestServer()
-    {
+    public TestServer() {
         try {
             server = new ServerSocket(10170,3);
             allOut = new ConcurrentHashMap<>();
@@ -34,11 +32,10 @@ public class TestServer {
             e.printStackTrace();
         }
     }
-    //
+    //获取服务端的数据库(存放用户认证信息)
     public SQLServer GetServerDB(){return DBServer;}
     //接收一个客户端的连接,返回一个Socket
-    public Socket GetSoc()
-    {
+    public Socket GetSoc() {
         try {
             System.out.println("Server established.");
             boolean flag = true;
@@ -93,17 +90,14 @@ public class TestServer {
             e.printStackTrace();
         }
     }
-
     //main方法,调用start()方法
-    public static void main(String[] args)
-    {
+    public static void main(String[] args) {
         TestServer MainServer = new TestServer();
         MainServer.start();
     }
-
     //Class Handler是与Client通信的一个子线程
     private class Handler implements Runnable {
-        //private final String name;
+        private String name;
         private final int num;
         private final Socket s;
         public Handler(/*String name,*/ int num, Socket s) {
@@ -126,53 +120,71 @@ public class TestServer {
         //登录方法
         public void LogIn(){
             System.out.println("Waiting for login info...");
+            if(s.isConnected()){
+                String str = GetOnce();
+                if(str.equals("Error")){return;}
+                StringTokenizer st = new StringTokenizer(str,"`");
+                String name = st.nextToken();
+                this.name = name;
+                String pw = st.nextToken();
+                Integer Auth = GetServerDB().LogInAuth(name,pw);
+                if(Auth.equals(1)) {
+                    //密码正确,回应登录成功,并将状态更改为true
+                    GetServerDB().ChangeOnline(name,true,num);
+                    send2One("1", num);
+                    send2All(name+" log in.",num);
+                }
+                else if(Auth.equals(0)) {
+                    //新用户的处理
+                    GetServerDB().AddClient(name, pw, num);
+                    send2One("1",num);
+                    send2All(name+" log in.",num);
+                }
+                else if(Auth.equals(-1)){
+                    send2One("0",num);
+                    try{
+                        s.close();
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+                else{
+                    System.out.println("Database Error.");
+                    try{
+                        s.close();
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+            System.out.println("Log in over.");
+        }
+        //登录成功后,发送在线用户名单
+        public void SendOnlineStatus(){
+            String str = GetOnce();
+            while(!str.equals("request_for_onlineUser")){
+                str = GetOnce();
+            }
+            send2One(GetServerDB().GetOnlineStatus(), num);
+        }
+        //一个可以复用的方法,接收一次输入流的数据
+        public String GetOnce(){
             try{
-                if(s.isConnected()){
+                if(s.isConnected()) {
                     InputStream in = s.getInputStream();
-                    InputStreamReader isr = new InputStreamReader(in,StandardCharsets.UTF_8);
+                    InputStreamReader isr = new InputStreamReader(in, StandardCharsets.UTF_8);
                     //创建一个缓冲区输入流和一个String
                     BufferedReader br = new BufferedReader(isr);
                     String str = null;
-                    //System.out.println("Ready");
-                    while(s.isConnected()){
+                    while (s.isConnected()) {
                         str = br.readLine();
-                        //System.out.println("Reading");
-                        if(str!=null) break;
+                        if (str != null) break;
                     }
-                    assert str != null;
-                    //System.out.println("Get Msg");
-                    StringTokenizer st = new StringTokenizer(str,"`");
-                    String name = st.nextToken();
-                    String pw = st.nextToken();
-                    Integer Auth = GetServerDB().LogInAuth(name,pw);
-                    if(Auth.equals(1)) send2One("You are logged in.",num);
-                    else if(Auth.equals(0)) {
-                        GetServerDB().AddClient(name, pw);
-                        send2One("You are logged in.",num);
-                    }
-                    else if(Auth.equals(-1)){
-                        send2One("Wrong password.",num);
-                        try{
-                            s.close();
-                        }catch (IOException e){
-                            e.printStackTrace();
-                        }
-                    }
-                    else{
-                        System.out.println("Database Error.");
-                        try{
-                            s.close();
-                        }catch (IOException e){
-                            e.printStackTrace();
-                        }
-                    }
-                    System.out.println("Send");
+                    return str;
                 }
-            }catch (IOException e){
-                e.printStackTrace();
-            }
+            }catch (IOException e){e.printStackTrace();}
+            return "Error";
         }
-
         public void MsgHandler(Socket s, int i)
         {
             /* 尝试将获取输入与转发放到一个函数里
@@ -184,9 +196,6 @@ public class TestServer {
             try {
                 //获取客户端Socket的输出流
                 if(s.isConnected()){
-
-                    //广播该用户上线(后续可以去掉这个)
-                    send2All("Client"+i+" log in.",-1);
                     //创建一个属于线程的输入流,获取客户端的输入
                     InputStream in = s.getInputStream();
                     InputStreamReader isr = new InputStreamReader(in,StandardCharsets.UTF_8);
@@ -196,12 +205,21 @@ public class TestServer {
                     while(s.isConnected()){
                         msg = br.readLine();
                         if(msg!=null){
-                            System.out.println("Client" + i + " says: " + msg);
                             if(msg.equals("/logout")){
                                 send2One(msg,i);
                                 break;
                             }
-                            send2All("Client" + i + " says: " + msg,i);
+                            String[] tMsg = new String[2];
+                            //msg->@name:msg
+                            tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);//name
+                            tMsg[1] = msg.substring(msg.indexOf(":"));//msg
+                            //@All:msg
+//                            if(tMsg[0].equals("All")){ /*send2All("@" + name + ":" + tMsg[1],i);*/ }
+//                            else{
+                            Integer des = DBServer.FindNum(tMsg[0]);
+                            if(des>=0) { send2One("@"+ name + tMsg[1],des); }
+                            //}
+                            System.out.println(name + " says: " + msg);
                         }
                     }
                 }
@@ -211,7 +229,8 @@ public class TestServer {
                 //连接断开时,将服务端的Socket close,并且remove对应的pw
                 removeOut(i);
                 //广播该客户端离线
-                send2All("Client" + i + " log out.",i);
+                GetServerDB().ChangeOnline(name,false,i);
+                send2All(name + " log out.",i);
                 //关闭Socket
                 if(s!=null){
                     try{
@@ -229,6 +248,7 @@ public class TestServer {
             System.out.println("Start task: " + num);
             try {
                 LogIn();
+                SendOnlineStatus();
                 MsgHandler(s, num);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -236,7 +256,6 @@ public class TestServer {
             System.out.println("End Task: " + num);
         }
     }
-
     //监听服务器端是否关闭的线程--通过键盘输入/exit
     private class CloseThread implements Runnable {
         @Override
@@ -251,6 +270,7 @@ public class TestServer {
                         e.printStackTrace();
                     }
                     finally {
+                        DBServer.ServerClose();
                         es.shutdown();
                     }
                     System.exit(0);
