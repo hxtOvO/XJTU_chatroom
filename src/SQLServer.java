@@ -107,7 +107,7 @@ public class SQLServer {
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
             String sql = "UPDATE Clients" +
                     "SET flag = false, num = null";
-            try(Statement stmt=conn.createStatement();){
+            try(Statement stmt=conn.createStatement()){
                 stmt.executeUpdate(sql);
             }
         }catch (SQLException se){se.printStackTrace();}
