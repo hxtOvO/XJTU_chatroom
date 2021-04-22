@@ -210,13 +210,15 @@ public class TestServer {
                                 break;
                             }
                             String[] tMsg = new String[2];
-                            tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);
-                            tMsg[1] = msg.substring(msg.indexOf(":"));
-                            if(tMsg[0].equals("All")){ send2All(name + " says: " + tMsg[1],i); }
-                            else{
-                                Integer des = DBServer.FindNum(tMsg[0]);
-                                if(des>=0) { send2One(name + "says: "+tMsg[1],des); }
-                            }
+                            //msg->@name:msg
+                            tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);//name
+                            tMsg[1] = msg.substring(msg.indexOf(":"));//msg
+                            //@All:msg
+//                            if(tMsg[0].equals("All")){ /*send2All("@" + name + ":" + tMsg[1],i);*/ }
+//                            else{
+                            Integer des = DBServer.FindNum(tMsg[0]);
+                            if(des>=0) { send2One("@"+ name + tMsg[1],des); }
+                            //}
                             System.out.println(name + " says: " + msg);
                         }
                     }
@@ -268,6 +270,7 @@ public class TestServer {
                         e.printStackTrace();
                     }
                     finally {
+                        DBServer.ServerClose();
                         es.shutdown();
                     }
                     System.exit(0);
