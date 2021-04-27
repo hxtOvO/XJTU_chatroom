@@ -5,6 +5,8 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import java.awt.*;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.*;
@@ -92,6 +94,44 @@ public class ChatClient extends JFrame {
         button.setText("发送");
         panel.add(button);
 
+        //发送文件选项
+        final JButton fileButton = new JButton();
+        fileButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if(socket != null){
+                    FileChooser fileChooser = new FileChooser();
+                    fileChooser.createFileChooser();
+                    File file_send = fileChooser.getFile();
+                    //System.out.println(file_send.getName());
+                    //选择好文件，弹出确认对话框
+                    if(file_send != null) {
+                        int confirm = JOptionPane.showConfirmDialog(null,"是否确认发送"+file_send.getName() +"?","发送确认",JOptionPane.YES_NO_OPTION);
+                        if(confirm == JOptionPane.YES_OPTION){
+                            //确认发送 发送信息到对方
+                            //System.out.println("确认发送");
+                            ChatConnect();
+                            try {
+                                //向服务器写入该次文件传输的请求
+                                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                                pw.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName());
+                                System.out.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName());
+                            } catch (IOException ioException) {
+                                ioException.printStackTrace();
+                            } finally {
+                                ClientClose();
+                            }
+                        }
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        fileButton.setText("发送文件");
+        panel.add(fileButton);
+
+
         //将主窗口分为左右两部分
         final JSplitPane splitPane = new JSplitPane();
         splitPane.setDividerLocation(150);
@@ -124,13 +164,6 @@ public class ChatClient extends JFrame {
                 //在name-JTextPane的键对中找到选定name对应的JTextPane,将RightPane赋值给他
                 //其实这里相当于构建Document了，把对应的Document放进ta_show
                 ta_show.setDocument(ChatWindowsMap.get(user_online.elementAt(userIndex)).getDocument());
-
-//                Document docs = ta_show.getDocument();
-//                try {
-//                    docs.insertString(docs.getLength(),"switch to "+user_online.elementAt(userIndex)+" \n",attrset);
-//                } catch (BadLocationException er) {
-//                    er.printStackTrace();
-//                }
             }
         });
 
@@ -151,6 +184,21 @@ public class ChatClient extends JFrame {
         });
         button_login.setText("登录");
         userPanel.add(button_login);
+
+        final JButton button_logout = new JButton();
+        button_logout.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                tf_send.setText("/logout");
+                SendMsgToServer sender1 = new SendMsgToServer();
+                Thread thread = new Thread(sender1);
+                thread.start();
+            }
+        });
+        button_logout.setText("退出");
+        userPanel.add(button_logout);
+
+
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         //居中
         setLocationRelativeTo(null);
@@ -287,6 +335,35 @@ public class ChatClient extends JFrame {
         public String getPassword(){ return keyIn != null ? String.valueOf(keyIn.getPassword()) : null; }
     }
 
+    //选择发送文件的类
+    public class FileChooser extends JFileChooser{
+        private File file = null;
+        private JFileChooser fileChooser = null;
+        //private static final long serialVersionUID = 1;
+        public void createFileChooser() {
+            fileChooser = new JFileChooser();
+            fileChooser.setPreferredSize(new Dimension(800,500));
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+            fileChooser.showDialog(new JLabel(),"选择发送文件");
+            file = fileChooser.getSelectedFile();
+            if(file != null){
+                if(file.isDirectory()) {
+                    //FilePath = file.getPath();
+                    System.out.println("文件夹：" + file.getAbsolutePath());
+                }
+                else if(file.isFile()) {
+                    //Filename = file.getAbsolutePath();
+                    System.out.println("文件：" + file.getAbsolutePath());
+                }
+                //file = jFileChooser.getSelectedFile();
+                System.out.println(fileChooser.getSelectedFile().getName());
+            }
+        }
+
+        public File getFile() {
+            return file;
+        }
+    }
 
     //开启监听信息的线程--长连接
     public void start(){
@@ -402,14 +479,19 @@ public class ChatClient extends JFrame {
                         if(msg.startsWith("@")) {
                             String str = msg.substring(1);
                             String[] ss = str.split(":");
-                            //是消息内容 @name:msg
-                            try {
-                                System.out.println(ss[0]+" says "+ss[1]);
-                                Document docs = ChatWindowsMap.get(ss[0]).getDocument();
-                                docs.insertString(docs.getLength() , ss[0] +" says: "+ss[1], attrset);
-                                //ta_show.setDocument(docs);
-                            } catch (BadLocationException e) {
-                                e.printStackTrace();
+                            if(ss[0].equals("/SendFile")){
+                                //如果是传文件请求
+
+                            } else {
+                                //是消息内容 @name:msg
+                                try {
+                                    System.out.println(ss[0]+" says "+ss[1]);
+                                    Document docs = ChatWindowsMap.get(ss[0]).getDocument();
+                                    docs.insertString(docs.getLength() , ss[0] +" says: "+ss[1] +"\n", attrset);
+                                    //ta_show.setDocument(docs);
+                                } catch (BadLocationException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         } else {//是登录/登出消息:name log in./out.
                             StyleConstants.setBold(attrset , true);
