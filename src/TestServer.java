@@ -216,6 +216,9 @@ public class TestServer {
                             //@All:msg
 //                            if(tMsg[0].equals("All")){ /*send2All("@" + name + ":" + tMsg[1],i);*/ }
 //                            else{
+                            if(tMsg[1].startsWith("/SendFile", 1)){
+                                tMsg[1] = tMsg[1]+"/IP:"+s.getInetAddress().getHostAddress();
+                            }
                             Integer des = DBServer.FindNum(tMsg[0]);
                             if(des>=0) { send2One("@"+ name + tMsg[1],des); }
                             //}
