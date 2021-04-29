@@ -10,10 +10,14 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.*;
+import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * @program: XJTU_chatroom
@@ -110,16 +114,19 @@ public class ChatClient extends JFrame {
                         if(confirm == JOptionPane.YES_OPTION){
                             //确认发送 发送信息到对方
                             //System.out.println("确认发送");
-                            ChatConnect();
+                            //ChatConnect();
                             try {
-                                //向服务器写入该次文件传输的请求
+                                //向服务器写入该次文件传输的请求,并附加上文件的名字和期待建立连接的端口号
                                 PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
-                                pw.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName());
-                                System.out.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName());
+                                SendFile sf = new SendFile(file_send);
+                                Thread thread = new Thread(sf);
+                                thread.start();
+                                pw.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName()+"/"+sf.GetFileLength()+"/"+sf.GetPort());
+                                System.out.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName()+"/"+sf.GetFileLength()+"/"+sf.GetPort());
                             } catch (IOException ioException) {
                                 ioException.printStackTrace();
                             } finally {
-                                ClientClose();
+
                             }
                         }
                     }
@@ -203,6 +210,7 @@ public class ChatClient extends JFrame {
         //居中
         setLocationRelativeTo(null);
     }
+
 
     //请求服务器获得在线名单 -> Vector
     public Vector<String> getOnlineList(){
@@ -473,21 +481,44 @@ public class ChatClient extends JFrame {
                         break;
                     }
                     else{
-                        //System.out.println(msg);
+                        System.out.println(msg);
                         //将接收到的消息显示出来：(目前不考虑时间)
                         //Document docs = ta_show.getDocument();
                         if(msg.startsWith("@")) {
-                            String str = msg.substring(1);
-                            String[] ss = str.split(":");
-                            if(ss[0].equals("/SendFile")){
+                            //以@开头说明不是登录登出消息
+
+                            String[] ss = msg.substring(msg.indexOf(":")+1).split("/");
+                            //ss[0]:""
+                            //ss[1]:SendFile:Filename
+                            //ss[2]:FileLength
+                            //ss[3]:Port:xxx
+                            //ss[4]:IP:xxx.xxx.xxx.xxx
+                            //System.out.println(ss[1] + ss[2]+ss[3]+ss[4]);
+
+                            if(ss.length >=2 && ss[1].startsWith("SendFile")){
                                 //如果是传文件请求
+                                int confirm = JOptionPane.showConfirmDialog(null,"是否确认接收来自"+msg.substring(1,msg.indexOf(":")) +"的文件：\n"+ss[1].substring(ss[1].indexOf(":")+1),"接收确认",JOptionPane.YES_NO_OPTION);
+                                if(confirm == JOptionPane.YES_OPTION) {
+                                    GetFile gf = new GetFile(InetAddress.getLocalHost().getHostAddress(), Integer.parseInt(ss[3]),Long.parseLong(ss[2]));
+                                    Thread thread = new Thread(gf);
+                                    thread.start();
+                                } else {
+                                    Document docs = ChatWindowsMap.get(msg.substring(1,msg.indexOf(":"))).getDocument();
+                                    try {
+                                        docs.insertString(docs.getLength(),"拒绝了对方的文件："+ss[1].substring(ss[1].indexOf(":")+1),attrset);
+                                    } catch (BadLocationException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
 
                             } else {
+                                String str = msg.substring(1);
+                                String[] mss = str.split(":");
                                 //是消息内容 @name:msg
                                 try {
-                                    System.out.println(ss[0]+" says "+ss[1]);
-                                    Document docs = ChatWindowsMap.get(ss[0]).getDocument();
-                                    docs.insertString(docs.getLength() , ss[0] +" says: "+ss[1] +"\n", attrset);
+                                    System.out.println(mss[0]+" says "+mss[1]);
+                                    Document docs = ChatWindowsMap.get(mss[0]).getDocument();
+                                    docs.insertString(docs.getLength() , mss[0] +" says: "+mss[1] +"\n", attrset);
                                     //ta_show.setDocument(docs);
                                 } catch (BadLocationException e) {
                                     e.printStackTrace();
@@ -508,7 +539,7 @@ public class ChatClient extends JFrame {
                                 }
                                 //刷新user_online列表
                                 user_list.setListData(user_online);
-                                user_list.updateUI();
+                                //user_list.updateUI();
                             } finally {
                                 StyleConstants.setBold(attrset , false);
                                 StyleConstants.setFontSize(attrset,14);
@@ -520,6 +551,112 @@ public class ChatClient extends JFrame {
                 e.printStackTrace();
             } finally {
                 ClientClose();
+            }
+        }
+    }
+
+    //发送文件线程
+    private class SendFile implements Runnable{
+        //private String FileLength;
+        private ServerSocket serverSocket;
+        private Socket soc = null;
+        private File file;
+        private boolean isFinished = false;
+        @Override
+        public void run(){
+            try{
+                boolean flag = true;
+                while(flag){
+                    soc = serverSocket.accept();
+                    if(soc!=null) flag = false;
+                }
+                FileInputStream fis = new FileInputStream(file);
+                DataOutputStream dos = new DataOutputStream(soc.getOutputStream());
+                dos.writeUTF(file.getName());
+                System.out.println("Start send file...");
+
+
+                byte[] bytes = new byte[1024];
+                int length;
+                long progress = 0;
+                while((length = fis.read(bytes, 0, bytes.length))!=-1){
+                    dos.write(bytes,0,length);
+                    dos.flush();
+                    progress+=length;
+                    System.out.println("send "+progress);
+                }
+                System.out.println("Send over.");
+                isFinished = true;
+                JOptionPane.showMessageDialog(null,file.getName()+"已成功发送");
+                soc.close();
+                serverSocket.close();
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+        public long GetFileLength(){
+            return file.length();
+        }
+
+        public int GetPort(){
+            return serverSocket.getLocalPort();
+        }
+
+        public SendFile(File f){
+            try{
+                serverSocket = new ServerSocket(12345);
+                file = f;
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+    }
+
+    //接受文件线程
+    private class GetFile implements Runnable{
+        private Socket soc;
+        private long Length;
+        @Override
+        public void run(){
+            try{
+                if(soc.isConnected()){
+                    DataInputStream dis = new DataInputStream(soc.getInputStream());
+                    String fileName = dis.readUTF();
+                    File file = new File("D:\\XJTUchatroom"+File.separatorChar+fileName);
+                    FileOutputStream fos = new FileOutputStream(file);
+
+                    /* 使用FileOutputStream写入文件，FileOutputStream的write()方法只接受byte[]类型的参数
+                    */
+                    byte[] bytes = new byte[1024];
+                    int length;//接收方每次读取收到的文件长度
+                    long fileLength = 0;//接收方总接收的文件长度
+                    System.out.println("Start get file... + Length = "+Length);
+
+                    while(fileLength < Length && (length = dis.read(bytes,0,bytes.length))!=-1){
+                        fos.write(bytes,0,length);
+                        fos.flush();
+                        fileLength += length;
+                        System.out.println(fileLength);
+                    }
+                    System.out.println("Get over.");
+                    //System.out.println("?????");
+                    JOptionPane.showMessageDialog(null,"文件已保存至："+file.getAbsolutePath());
+                    soc.close();
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+        public GetFile(String ip, int port, long l){
+            try {
+                System.out.println(ip+","+port);
+                soc = new Socket(ip,port);
+                this.Length = l;
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
