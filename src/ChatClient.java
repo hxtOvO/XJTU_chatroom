@@ -5,10 +5,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import java.awt.*;
 
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -16,8 +13,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * @program: XJTU_chatroom
@@ -31,8 +26,8 @@ public class ChatClient extends JFrame {
     private volatile int count = 0;
     private final JTextField tf_send;
     private final SimpleAttributeSet attrset;
-    private JTextPane ta_show;
-    private final JList user_list;
+    private final JTextPane ta_show;
+    private final JList<String> user_list;
     private Vector<String> user_online;
     private int userIndex = -1;
     private String username;
@@ -80,6 +75,23 @@ public class ChatClient extends JFrame {
 
         tf_send = new JTextField();
         tf_send.setPreferredSize(new Dimension(180,30));
+        tf_send.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                if(e.getKeyChar() ==KeyEvent.VK_ENTER){
+                    if(socket != null)
+                    {
+                        SendMsgToServer sender1 = new SendMsgToServer();
+                        sender1.setClientMessage(tf_send.getText());
+                        Thread thread = new Thread(sender1);
+                        thread.start();
+                    } else {
+                        JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+
         panel.add(tf_send);
 
         final JButton button = new JButton();
@@ -88,12 +100,12 @@ public class ChatClient extends JFrame {
             if(socket != null)
             {
                 SendMsgToServer sender1 = new SendMsgToServer();
+                sender1.setClientMessage(tf_send.getText());
                 Thread thread = new Thread(sender1);
                 thread.start();
             } else {
                 JOptionPane.showMessageDialog(null,"请先登录！","提示",JOptionPane.ERROR_MESSAGE);
             }
-
         });
         button.setText("发送");
         panel.add(button);
@@ -125,8 +137,6 @@ public class ChatClient extends JFrame {
                                 System.out.println("@"+user_online.elementAt(user_list.getSelectedIndex())+":/SendFile:"+file_send.getName()+"/"+sf.GetFileLength()+"/"+sf.GetPort());
                             } catch (IOException ioException) {
                                 ioException.printStackTrace();
-                            } finally {
-
                             }
                         }
                     }
@@ -160,7 +170,7 @@ public class ChatClient extends JFrame {
         //获得在线名单
         user_online = new Vector<>(10);
 
-        user_list = new JList();
+        user_list = new JList<>();
         user_list.setListData(user_online);
         user_list.setBorder(BorderFactory.createTitledBorder("当前在线用户名单"));
         user_list.addMouseListener(new MouseAdapter() {
@@ -193,14 +203,11 @@ public class ChatClient extends JFrame {
         userPanel.add(button_login);
 
         final JButton button_logout = new JButton();
-        button_logout.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                tf_send.setText("/logout");
-                SendMsgToServer sender1 = new SendMsgToServer();
-                Thread thread = new Thread(sender1);
-                thread.start();
-            }
+        button_logout.addActionListener(e -> {
+            SendMsgToServer sender1 = new SendMsgToServer();
+            sender1.setClientMessage("/logout");
+            Thread thread = new Thread(sender1);
+            thread.start();
         });
         button_logout.setText("退出");
         userPanel.add(button_logout);
@@ -232,11 +239,9 @@ public class ChatClient extends JFrame {
 
         } catch (IOException e){
             e.printStackTrace();
-        } finally {
-            assert str != null;
-            return new Vector<>(Arrays.asList(str.split("`")));
         }
-
+        assert str != null;
+        return new Vector<>(Arrays.asList(str.split("`")));
     }
 
     //登录界面的类
@@ -268,49 +273,57 @@ public class ChatClient extends JFrame {
             c.add(userIn);
             keyIn = new JPasswordField();
             keyIn.setBounds(100,100,100,30);
+            keyIn.addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyTyped(KeyEvent e) {
+                    if(e.getKeyChar() ==KeyEvent.VK_ENTER){
+                        executeLogin();
+                    }
+                }
+            });
             c.add(keyIn);
 
             JButton login = new JButton();
             login.setText("登录");
             login.setBounds(225 ,100,100,20);
-            login.addActionListener(e -> {
-                //传输username和password到服务器端
-                ChatConnect();
-                Integer logAuth = LogIn();
-                //检测是否登录成功
-                if(logAuth==1){
-                    //登录成功，获得当前在线名单
-                    user_online = getOnlineList();
-                    user_list.setListData(user_online);
-                    //获得在线名单后，建立name与JTextPane的HashMap
-                    ChatWindowsMap = new HashMap<>();
-                    for(String ss : user_online){
-                        ChatWindowsMap.put(ss,new JTextPane());
-                    }
-
-                    user_list.updateUI();
-                    username = userIn.getText();
-                    Document document = ta_show.getDocument();
-                    try {
-                        document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
-                    } catch (BadLocationException badLocationException) {
-                        badLocationException.printStackTrace();
-                    }
-                    start();
-                    jDialog.dispose();
-                }else{
-                    if(logAuth==0){
-                        JOptionPane.showMessageDialog(jDialog,"密码错误！","提示",JOptionPane.ERROR_MESSAGE);
-                    }
-                    else if(logAuth==-1){
-                        JOptionPane.showMessageDialog(jDialog,"未知错误！","提示",JOptionPane.ERROR_MESSAGE);
-                    }
-                    ClientClose();
-                }
-            });
+            login.addActionListener(e -> executeLogin());
             c.add(login);
-
             jDialog.setVisible(true);
+        }
+
+        public void executeLogin(){
+            ChatConnect();
+            Integer logAuth = LogIn();
+            //检测是否登录成功
+            if(logAuth==1){
+                //登录成功，获得当前在线名单
+                user_online = getOnlineList();
+                user_list.setListData(user_online);
+                //获得在线名单后，建立name与JTextPane的HashMap
+                ChatWindowsMap = new HashMap<>();
+                for(String ss : user_online){
+                    ChatWindowsMap.put(ss,new JTextPane());
+                }
+
+                user_list.updateUI();
+                username = userIn.getText();
+                Document document = ta_show.getDocument();
+                try {
+                    document.insertString(document.getLength() , userIn.getText() + " has logged in." +"\n", attrset);
+                } catch (BadLocationException badLocationException) {
+                    badLocationException.printStackTrace();
+                }
+                start();
+                jDialog.dispose();
+            }else{
+                if(logAuth==0){
+                    JOptionPane.showMessageDialog(jDialog,"密码错误！","提示",JOptionPane.ERROR_MESSAGE);
+                }
+                else if(logAuth==-1){
+                    JOptionPane.showMessageDialog(jDialog,"未知错误！","提示",JOptionPane.ERROR_MESSAGE);
+                }
+                ClientClose();
+            }
         }
 
         public Integer LogIn(){
@@ -344,12 +357,10 @@ public class ChatClient extends JFrame {
     }
 
     //选择发送文件的类
-    public class FileChooser extends JFileChooser{
+    public static class FileChooser extends JFileChooser{
         private File file = null;
-        private JFileChooser fileChooser = null;
-        //private static final long serialVersionUID = 1;
         public void createFileChooser() {
-            fileChooser = new JFileChooser();
+            JFileChooser fileChooser = new JFileChooser();
             fileChooser.setPreferredSize(new Dimension(800,500));
             fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
             fileChooser.showDialog(new JLabel(),"选择发送文件");
@@ -424,6 +435,12 @@ public class ChatClient extends JFrame {
 
     //向服务器发送消息
     private class SendMsgToServer implements Runnable{
+        private String ClientMessage;
+
+        public void setClientMessage(String clientMessage) {
+            this.ClientMessage = clientMessage;
+        }
+
         @Override
         public void run(){
             try {
@@ -432,7 +449,7 @@ public class ChatClient extends JFrame {
                 //Scanner scanner = new Scanner(System.in);
 
                 //改为从tf_send获得消息
-                String ClientMessage = tf_send.getText();
+                //ClientMessage = tf_send.getText();
 
                 //登出的消息不加头部
                 if(ClientMessage.equals("/logout")){
@@ -463,7 +480,6 @@ public class ChatClient extends JFrame {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
         }
     }
 
@@ -499,7 +515,7 @@ public class ChatClient extends JFrame {
                                 //如果是传文件请求
                                 int confirm = JOptionPane.showConfirmDialog(null,"是否确认接收来自"+msg.substring(1,msg.indexOf(":")) +"的文件：\n"+ss[1].substring(ss[1].indexOf(":")+1),"接收确认",JOptionPane.YES_NO_OPTION);
                                 if(confirm == JOptionPane.YES_OPTION) {
-                                    GetFile gf = new GetFile(InetAddress.getLocalHost().getHostAddress(), Integer.parseInt(ss[3]),Long.parseLong(ss[2]));
+                                    GetFile gf = new GetFile(InetAddress.getLocalHost().getHostAddress(), Integer.parseInt(ss[3]), Long.parseLong(ss[2]));
                                     Thread thread = new Thread(gf);
                                     thread.start();
                                 } else {
@@ -556,12 +572,12 @@ public class ChatClient extends JFrame {
     }
 
     //发送文件线程
-    private class SendFile implements Runnable{
+    private static class SendFile implements Runnable{
         //private String FileLength;
         private ServerSocket serverSocket;
         private Socket soc = null;
         private File file;
-        private boolean isFinished = false;
+
         @Override
         public void run(){
             try{
@@ -586,7 +602,6 @@ public class ChatClient extends JFrame {
                     System.out.println("send "+progress);
                 }
                 System.out.println("Send over.");
-                isFinished = true;
                 JOptionPane.showMessageDialog(null,file.getName()+"已成功发送");
                 soc.close();
                 serverSocket.close();
@@ -615,7 +630,7 @@ public class ChatClient extends JFrame {
     }
 
     //接受文件线程
-    private class GetFile implements Runnable{
+    private static class GetFile implements Runnable{
         private Socket soc;
         private long Length;
         @Override
