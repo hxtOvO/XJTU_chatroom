@@ -16,9 +16,9 @@ import java.util.*;
 
 /**
  * @program: XJTU_chatroom
- * @description: 实现私聊，实现维护个人聊天界面记录，实现动态维护在线名单
+ * @description: 优化细节
  * @create: 2021-04-13 19:59
- * @version 3.0.0
+ * @version 3.2.0
  **/
 
 public class ChatClient extends JFrame {
