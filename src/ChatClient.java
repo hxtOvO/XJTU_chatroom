@@ -513,9 +513,13 @@ public class ChatClient extends JFrame {
 
                             if(ss.length >=2 && ss[1].startsWith("SendFile")){
                                 //如果是传文件请求
-                                int confirm = JOptionPane.showConfirmDialog(null,"是否确认接收来自"+msg.substring(1,msg.indexOf(":")) +"的文件：\n"+ss[1].substring(ss[1].indexOf(":")+1),"接收确认",JOptionPane.YES_NO_OPTION);
+                                int confirm = JOptionPane.showConfirmDialog(null,
+                                        "是否确认接收来自"+msg.substring(1,msg.indexOf(":"))
+                                                +"的文件：\n"+ss[1].substring(ss[1].indexOf(":")+1),
+                                        "接收确认",JOptionPane.YES_NO_OPTION);
                                 if(confirm == JOptionPane.YES_OPTION) {
-                                    GetFile gf = new GetFile(InetAddress.getLocalHost().getHostAddress(), Integer.parseInt(ss[3]), Long.parseLong(ss[2]));
+                                    GetFile gf = new GetFile(InetAddress.getLocalHost().getHostAddress(),
+                                                Integer.parseInt(ss[3]), Long.parseLong(ss[2]));
                                     Thread thread = new Thread(gf);
                                     thread.start();
                                 } else {
@@ -590,8 +594,6 @@ public class ChatClient extends JFrame {
                 DataOutputStream dos = new DataOutputStream(soc.getOutputStream());
                 dos.writeUTF(file.getName());
                 System.out.println("Start send file...");
-
-
                 byte[] bytes = new byte[1024];
                 int length;
                 long progress = 0;

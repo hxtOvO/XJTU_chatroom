@@ -2,6 +2,10 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Scanner;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +19,8 @@ import java.util.concurrent.Executors;
 public class TestServer {
     //服务端的ServerSocket,稳定只有一个
     private ServerSocket server = null;
+    //文件服务器,有一个
+    private ServerSocket fileServer = null;
     //服务端的Socket,是个临时变量
     private Socket soc = null;
     //输出流的list,需要线程安全
@@ -25,7 +31,8 @@ public class TestServer {
     //构造函数,创建一个ServerSocket,监听10170端口,连接队列为3,同时创建输出流队列
     public TestServer() {
         try {
-            server = new ServerSocket(10170,3);
+            server = new ServerSocket(10170,30);
+            fileServer = new ServerSocket(10180,30);
             allOut = new ConcurrentHashMap<>();
             DBServer = new SQLServer();
         } catch (IOException e) {
@@ -35,14 +42,14 @@ public class TestServer {
     //获取服务端的数据库(存放用户认证信息)
     public SQLServer GetServerDB(){return DBServer;}
     //接收一个客户端的连接,返回一个Socket
-    public Socket GetSoc() {
+    public Socket GetSoc(ServerSocket se) {
         try {
             System.out.println("Server established.");
             boolean flag = true;
             while(flag)
             {
                 System.out.println("Waiting for connection...");
-                soc = server.accept();
+                soc = se.accept();
                 if(soc!=null) flag=false;
             }
         } catch (IOException e) {
@@ -66,7 +73,7 @@ public class TestServer {
             }
         }
     }
-    //转发给指定Socket,暂时只用于登出
+    //转发给指定Socket
     private synchronized void send2One(String str,Integer num){
         PrintWriter pw = allOut.get(num);
         pw.println(str);
@@ -82,7 +89,7 @@ public class TestServer {
             int userCount=0;//用于标识连接的Client
             do {
                 //向线程池中添加线程
-                es.submit(new Handler(userCount, GetSoc()));
+                es.submit(new Handler(userCount, GetSoc(server)));
                 userCount++;
             } while(true);
             //es.shutdown();
@@ -159,13 +166,18 @@ public class TestServer {
             }
             System.out.println("Log in over.");
         }
-        //登录成功后,发送在线用户名单
-        public void SendOnlineStatus(){
+        //登录成功后,发送一部分数据
+        public void SendStatus(){
             String str = GetOnce();
             while(!str.equals("request_for_onlineUser")){
                 str = GetOnce();
             }
             send2One(GetServerDB().GetOnlineStatus(), num);
+            int count = DirScan(name);//发送在服务器的离线文件数目
+            send2One("@"+name+":/Files:"+count, num);
+            if(count!=0){
+                SendFileList(name);
+            }
         }
         //一个可以复用的方法,接收一次输入流的数据
         public String GetOnce(){
@@ -185,8 +197,28 @@ public class TestServer {
             }catch (IOException e){e.printStackTrace();}
             return "Error";
         }
-        public void MsgHandler(Socket s, int i)
-        {
+
+        //发送离线文件列表
+        public void SendFileList(String name){
+            StringBuilder msg = new StringBuilder("@" + name + ":/FileList:");
+            String filePath = "/home/kkuan/Java/com/Clients/";
+            Path p = Paths.get(filePath+name);
+            try {
+                DirectoryStream<Path> stream = Files.newDirectoryStream(p);
+                for (Path file:stream){
+                    msg.append(file.getFileName());
+                    msg.append("~");
+                    msg.append(Files.size(file));
+                    msg.append("`");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            send2One(msg.toString(),num);
+
+        }
+
+        public void MsgHandler(Socket s, int i) {
             /* 尝试将获取输入与转发放到一个函数里
              * public void MsgHandler(Socket s, int i)
              * 输出流放在TestServer的list中(广播转发)
@@ -205,23 +237,43 @@ public class TestServer {
                     while(s.isConnected()){
                         msg = br.readLine();
                         if(msg!=null){
+                            //登出
                             if(msg.equals("/logout")){
                                 send2One(msg,i);
                                 break;
                             }
+                            //分割消息
                             String[] tMsg = new String[2];
                             //msg->@name:msg
                             tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);//name
                             tMsg[1] = msg.substring(msg.indexOf(":"));//msg
-                            //@All:msg
-//                            if(tMsg[0].equals("All")){ /*send2All("@" + name + ":" + tMsg[1],i);*/ }
-//                            else{
-                            if(tMsg[1].startsWith("/SendFile", 1)){
+                            if(tMsg[1].startsWith("/OnlineFile", 1)){
                                 tMsg[1] = tMsg[1]+"/IP:"+s.getInetAddress().getHostAddress();
                             }
-                            Integer des = DBServer.FindNum(tMsg[0]);
+                            if(tMsg[1].startsWith("/OfflineFile", 1)){
+                                //ss[2]:FileLength
+                                //ss[3]:Port
+                                String length = msg.substring(msg.indexOf(":")+1).split("/")[2].split(":")[1];
+                                String dst = msg.substring(1).split(":")[0];
+                                GetFile getFile = new GetFile(dst, Long.parseLong(length));
+                                Thread t = new Thread(getFile);
+                                t.start();
+                            }
+                            if(tMsg[1].startsWith("/FileList",1)){
+                                //@server:/FileList
+                                SendFileList(name);
+                            }
+                            if(tMsg[1].startsWith("/Download",1)){
+                                //@server:/Download/filename
+                                SendFile sendFile = new SendFile(name,tMsg[1].split("/")[2]);
+                                Thread t = new Thread(sendFile);
+                                t.start();
+                            }
+                            Integer des = -1;
+                            if(!tMsg[0].equals("server")){
+                                des = DBServer.FindNum(tMsg[0]);
+                            }
                             if(des>=0) { send2One("@"+ name + tMsg[1],des); }
-                            //}
                             System.out.println(name + " says: " + msg);
                         }
                     }
@@ -251,13 +303,110 @@ public class TestServer {
             System.out.println("Start task: " + num);
             try {
                 LogIn();
-                SendOnlineStatus();
+                SendStatus();
                 MsgHandler(s, num);
             } catch (Exception e) {
                 e.printStackTrace();
             }
             System.out.println("End Task: " + num);
         }
+    }
+    //接收离线文件的类
+    private class GetFile implements Runnable{
+        private String path = "/home/kkuan/Java/com/Clients/";
+        private final Socket fileSocket;
+        private final long length;
+
+        @Override
+        public void run(){
+            try{
+                if(soc.isConnected()){
+                    DataInputStream dis = new DataInputStream(fileSocket.getInputStream());
+                    String fileName = dis.readUTF();
+                    Path p = Paths.get(path+"/"+fileName);
+                    OutputStream out = new BufferedOutputStream(
+                            Files.newOutputStream(p)
+                    );
+                    byte[] bytes = new byte[1024];
+                    int length;
+                    long fileLength = 0;
+                    System.out.println("Start get file...");
+                    while((length = dis.read(bytes,0,bytes.length))!=-1 && fileLength<=this.length){
+                        out.write(bytes,0,length);
+                        out.flush();
+                        fileLength += length;
+                    }
+                    System.out.println("Get over.");
+                    soc.close();
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+        public GetFile(String n, long l){
+            this.path = this.path+n;
+            this.length = l;
+            fileSocket = GetSoc(fileServer);
+        }
+    }
+    //发送离线文件的类
+    private class SendFile implements Runnable{
+        @Override
+        public void run(){
+            try{
+                String filePath = "/home/kkuan/Java/com/Clients/";
+                Path p = Paths.get(filePath +userName+"/"+fileName);
+                DataOutputStream dos = new DataOutputStream(fileSocket.getOutputStream());
+                dos.writeUTF(fileName);
+                byte[] bytes = new byte[1024];
+                int length;
+                long progress = 0;
+                FileInputStream fis = new FileInputStream(p.toFile());
+                System.out.println("Start send file.");
+                while((length = fis.read(bytes,0,bytes.length))!=-1){
+                    dos.write(bytes,0,length);
+                    dos.flush();
+                    progress+=length;
+                    System.out.println(fileName + " send " + progress);
+                }
+                System.out.println("Send over.");
+                fileSocket.close();
+            } catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+        private final String userName;
+        private final String fileName;
+        private final Socket fileSocket;
+
+        public SendFile(String un, String fn){
+            userName = un;
+            fileName = fn;
+            fileSocket = GetSoc(fileServer);
+        }
+    }
+    //登录后查一下对应用户的文件夹
+    public static int DirScan(String name){
+        //新用户 i=0 建一个新文件夹,返回0
+        //老用户 i=1 查一下文件夹,返回里面的文件数目
+        Path path = Paths.get("/home/kkuan/Java/com/Clients/"+name);
+        if(Files.exists(path)){
+            try {
+                return (int) Files.list(path).count();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            try {
+                Files.createDirectory(path);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return 0;
+        }
+        return -1;
     }
     //监听服务器端是否关闭的线程--通过键盘输入/exit
     private class CloseThread implements Runnable {

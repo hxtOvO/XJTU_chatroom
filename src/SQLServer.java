@@ -65,21 +65,31 @@ public class SQLServer {
     }
     //获取全部用户在线状态的方法
     public String GetOnlineStatus(){
+        StringBuilder sb = new StringBuilder(1024);
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            String sql = "SELECT name " +
+            String sql1 = "SELECT name " +
                     "FROM Clients " +
                     "WHERE flag = true";
+            String sql2 = "SELECT name " +
+                    "FROM Clients " +
+                    "WHERE flag = false";
             try (Statement stmt=conn.createStatement()){
-                try(ResultSet rs= stmt.executeQuery(sql)){
-                    StringBuilder sb = new StringBuilder(1024);
+                try(ResultSet rs= stmt.executeQuery(sql1)){
                     while(rs.next()){
                         sb.append(rs.getString("name"))
                                 .append("`");
                     }
-                    String st = sb.toString();
-                    if(st.length()!=0) return st;
-                    else return "None";
+                    sb.append("@");
                 }
+                try(ResultSet rs = stmt.executeQuery(sql2)){
+                    while(rs.next()){
+                        sb.append(rs.getString("name"))
+                                .append("`");
+                    }
+                }
+                String st = sb.toString();
+                if(st.length()!=0) return st;
+                else return "None";
             }
         }catch (SQLException se){se.printStackTrace();}
         return "Error";
@@ -105,11 +115,12 @@ public class SQLServer {
     public void ServerClose()
     {
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
-            String sql = "UPDATE Clients" +
+            String sql = "UPDATE Clients " +
                     "SET flag = false, num = null";
             try(Statement stmt=conn.createStatement()){
                 stmt.executeUpdate(sql);
             }
         }catch (SQLException se){se.printStackTrace();}
     }
+
 }
