@@ -21,12 +21,12 @@ import java.text.DateFormat;
 import java.util.*;
 
 /**
- * @version 4.0.0
+ * @version 5.0.0
  * @program: XJTU_chatroom
- * @description: 1.完全支持在线文件的断点续传（bug:文件拓展名.tmp改不过来）
- *               2.本来是支持离线文件的上传的，该为断点续传之后目前不支持
+ * @description: 1.完全支持在线文件的断点续传
+ *               2.完全支持离线文件的断点续传
  *               3.支持动态进度条显示文件传输进度（大文件）
- *               4.登录界面支持回车换行和回车登录，优化用户体验（方便我调试）
+ *               4.支持群聊，加入群聊和创建群聊
  *               5.发文件方法和收文件方法集成在对应的JFrame类里
  * @create: 2021-04-13 19:59
  **/
@@ -42,7 +42,7 @@ public class ChatClient extends JFrame {
     private int userIndex = -1;
     private String username;
     private HashMap<String, JTextPane> ChatWindowsMap;
-    //private Vector<String> vec_server;
+    private Vector<String> vec_group;
     private Vector<String> vec_online;
     private Vector<String> vec_offline;
     private Color[] color;
@@ -84,9 +84,9 @@ public class ChatClient extends JFrame {
         super();
         //换个好看点的UI
         try {
-            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
                 if ("Nimbus".equals(info.getName())) {
-                    UIManager.setLookAndFeel(info.getClassName());
+                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
                     break;
                 }
             }
@@ -256,7 +256,11 @@ public class ChatClient extends JFrame {
                 userIndex = user_list.getSelectedIndex();//获得当前选择的下标
                 //在name-JTextPane的键对中找到选定name对应的JTextPane,将RightPane赋值给他
                 //其实这里相当于构建Document了，把对应的Document放进ta_show
-                ta_show.setDocument(ChatWindowsMap.get(user_all.elementAt(userIndex)).getDocument());
+                if(color[userIndex] == Color.cyan){
+                    ta_show.setDocument(ChatWindowsMap.get("$"+user_all.elementAt(userIndex)).getDocument());
+                } else {
+                    ta_show.setDocument(ChatWindowsMap.get(user_all.elementAt(userIndex)).getDocument());
+                }
             }
         });
 
@@ -288,6 +292,118 @@ public class ChatClient extends JFrame {
         button_logout.setText("退出");
         userPanel.add(button_logout);
 
+        final JButton newGroup = new JButton("创建群聊");
+        newGroup.addActionListener(e -> {
+            //向服务端发消息建立一个名为name的群聊
+            if (socket != null) {
+                JDialog jDialog = new JDialog();
+                JTextField fileName;
+
+                jDialog.setLayout(null);
+
+                jDialog.setBounds(300, 400, 400, 200);
+                jDialog.setTitle("创建群聊");
+
+                Container c = jDialog.getContentPane();
+                JLabel userName = new JLabel();
+                userName.setText("新建的群聊名：");
+                userName.setBounds(25, 50, 50, 30);
+                c.add(userName);
+
+                fileName = new JTextField();
+                fileName.setBounds(100, 50, 100, 30);
+                fileName.addKeyListener(new KeyAdapter() {
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+                        if (e.getKeyChar() == KeyEvent.VK_ENTER) {
+                            try {
+                                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                                pw.println("");//通知服务器建立群聊
+                            } catch (IOException ioException) {
+                                ioException.printStackTrace();
+                            }
+                        }
+                    }
+                });
+                c.add(fileName);
+
+                JButton get = new JButton("确定");
+                get.setBounds(225, 100, 100, 20);
+                get.addActionListener(e1 -> {
+                    //PrintWriter pw = null;
+                    try {
+                        PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                        pw.println("@server:/GroupCreate:"+fileName.getText());//写入一个请求加入的信息给服务器
+                        jDialog.dispose();
+                    } catch (IOException ioException) {
+                        ioException.printStackTrace();
+                    }
+
+                });
+                c.add(get);
+                jDialog.setVisible(true);
+            } else {
+                JOptionPane.showMessageDialog(null, "请先登录！", "提示", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        userPanel.add(newGroup);
+
+        final JButton joinGroup = new JButton("加入群聊");
+        joinGroup.addActionListener(e -> {
+            //加入一个名为name的群聊
+            if (socket != null) {
+                JDialog jDialog = new JDialog();
+                JTextField fileName;
+
+                jDialog.setLayout(null);
+
+                jDialog.setBounds(300, 400, 400, 200);
+                jDialog.setTitle("加入群聊");
+
+                Container c = jDialog.getContentPane();
+                JLabel userName = new JLabel();
+                userName.setText("加入的群聊名：");
+                userName.setBounds(25, 50, 50, 30);
+                c.add(userName);
+
+                fileName = new JTextField();
+                fileName.setBounds(100, 50, 100, 30);
+                fileName.addKeyListener(new KeyAdapter() {
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+                        if (e.getKeyChar() == KeyEvent.VK_ENTER) {
+                            try {
+                                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                                pw.println("");//通知服务器建立群聊
+                            } catch (IOException ioException) {
+                                ioException.printStackTrace();
+                            }
+                        }
+                    }
+                });
+                c.add(fileName);
+
+                JButton get = new JButton("确定");
+                get.setBounds(225, 100, 100, 20);
+                get.addActionListener(e12 -> {
+                    //PrintWriter pw = null;
+                    try {
+                        PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                        pw.println("@server:/GroupJoin:"+fileName.getText());//写入一个请求加入的信息给服务器
+                        jDialog.dispose();
+                    } catch (IOException ioException) {
+                        ioException.printStackTrace();
+                    }
+
+                });
+                c.add(get);
+                jDialog.setVisible(true);
+            } else {
+                JOptionPane.showMessageDialog(null, "请先登录！", "提示", JOptionPane.ERROR_MESSAGE);
+            }
+
+        });
+        userPanel.add(joinGroup);
 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         //居中
@@ -332,8 +448,19 @@ public class ChatClient extends JFrame {
 
         vec_online = new Vector<>(Arrays.asList(ss[0].split("`")));
         vec_offline = new Vector<>(Arrays.asList(ss[1].split("`")));
-        //ss[0]处理后是当前在线的，ss[1]处理后是当前离线的
+        //vec_group = new Vector<>(Arrays.asList(ss[2].split("`")));
+        //ss[0]处理后是当前在线的，ss[1]处理后是当前离线的,ss[2]是当前该用户加入的群聊
         return update_user();
+    }
+
+    public void removeGroup(){
+        vec_group = new Vector<>();
+        for(int i=0;i<user_all.size();i++){
+            if(user_all.elementAt(i).startsWith("$")){
+                vec_group.add(user_all.elementAt(i));
+                user_all.set(i,user_all.elementAt(i).substring(1));
+            }
+        }
     }
 
     //更新用户名单
@@ -343,6 +470,9 @@ public class ChatClient extends JFrame {
         for (int i = 0; i < vec_offline.size(); i++) {
             tmp.add(vec_offline.elementAt(i));
         }
+//        for(int i=0;i<vec_group.size();i++){
+//            tmp.add(vec_group.elementAt(i));
+//        }
         return tmp;
     }
 
@@ -351,10 +481,10 @@ public class ChatClient extends JFrame {
         color = new Color[user_all.size()];
         for (int i = 0; i < user_all.size(); i++) {
             if (vec_online.contains(user_all.elementAt(i))) {
-                color[i] = Color.yellow;
+                color[i] = user_all.elementAt(i).startsWith("$") ? Color.cyan : Color.yellow;
             } else if(vec_offline.contains(user_all.elementAt(i))){
                 color[i] = Color.gray;
-            } else {
+            }  else {
                 color[i] = Color.PINK;
                 //System.out.println("server pink");
             }
@@ -424,7 +554,7 @@ public class ChatClient extends JFrame {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            System.out.println("@server:/Download/"+fileName.getText());
+            //System.out.println("@server:/Download/"+fileName.getText());
 
             new GetFileFrame("111.229.120.197",10180);
         }
@@ -655,15 +785,20 @@ public class ChatClient extends JFrame {
             //检测是否登录成功
             if (logAuth == 1) {
                 //登录成功，获得当前在线名单
-                user_all = getOnlineList();
-                user_list.setListData(user_all);
-                update_color();
-                user_list.setCellRenderer(new MyRenderer(color));
-                //获得在线名单后，建立name与JTextPane的HashMap
+                user_all = getOnlineList();//这时user_all里面的还有$
                 ChatWindowsMap = new HashMap<>();
                 for (String ss : user_all) {
                     ChatWindowsMap.put(ss, new JTextPane());
                 }
+
+                update_color();
+
+
+                removeGroup();
+                user_list.setListData(user_all);
+                user_list.setCellRenderer(new MyRenderer(color));
+                //获得在线名单后，建立name与JTextPane的HashMap
+
 
                 user_list.updateUI();
                 username = userIn.getText();
@@ -694,9 +829,10 @@ public class ChatClient extends JFrame {
                 System.out.println("logging in ...");
                 InputStreamReader isr = new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8);
                 BufferedReader br = new BufferedReader(isr);
-                String str = null;
-                while (socket.isConnected()) {
+                String str;
+                while (true) {
                     str = br.readLine();
+                    //System.out.println("reading");
                     if (str != null) break;
                 }
                 System.out.println("Get");
@@ -796,7 +932,11 @@ public class ChatClient extends JFrame {
 
                 } else {
                     //常规消息，格式为：@name:ClientMessage
-                    pw.println("@" + user_all.elementAt(userIndex) + ":" + ClientMessage);
+                    if(color[userIndex] == Color.yellow){
+                        pw.println("@" + user_all.elementAt(userIndex) + ":" + ClientMessage);
+                    } else if(color[userIndex] == Color.cyan){
+                        pw.println("@$" + user_all.elementAt(userIndex)+":"+ClientMessage);
+                    }
 
                     DateFormat dateFormat = DateFormat.getDateInstance();
                     String date = dateFormat.format(new Date());
@@ -836,7 +976,7 @@ public class ChatClient extends JFrame {
                         //将接收到的消息显示出来：(目前不考虑时间)
                         //Document docs = ta_show.getDocument();
                         if (msg.startsWith("@")) {
-                            //以@开头说明不是登录登出消息
+                            //以@开头说明是私聊消息
 
                             String[] ss = msg.substring(msg.indexOf(":") + 1).split("/");
                             //ss[0]:""
@@ -885,16 +1025,24 @@ public class ChatClient extends JFrame {
                                     e.printStackTrace();
                                 }
                             }
-                        } else {//是登录/登出消息:name log in./out.
+                        } else if(msg.contains("log in.")||msg.contains("log out.")){
                             StyleConstants.setBold(attrset, true);
                             StyleConstants.setFontSize(attrset, 10);
                             try {
                                 String[] ss = msg.split("\\s+");
                                 if (ss[2].equals("in.")) {
-                                    System.out.println("adding " + ss[0]);
-                                    vec_online.add(ss[0]);
-                                    vec_offline.remove(ss[0]);
-                                    ChatWindowsMap.put(ss[0], new JTextPane());
+                                    if(ss[0].startsWith("$")){
+                                        //$name log in.
+                                        ChatWindowsMap.put(ss[0],new JTextPane());
+                                        System.out.println("adding " + ss[0]);
+                                        vec_group.add(ss[0]);
+                                        vec_online.add(ss[0]);
+                                    } else {
+                                        System.out.println("adding " + ss[0]);
+                                        vec_online.add(ss[0]);
+                                        vec_offline.remove(ss[0]);
+                                        ChatWindowsMap.put(ss[0], new JTextPane());
+                                    }
                                 } else if (ss[2].equals("out.")) {
                                     vec_online.remove(ss[0]);
                                     vec_offline.add(ss[0]);
@@ -903,12 +1051,27 @@ public class ChatClient extends JFrame {
                                 //刷新user_online列表
                                 user_all = update_user();
                                 update_color();
+                                removeGroup();
                                 user_list.setListData(user_all);
                                 user_list.setCellRenderer(new MyRenderer(color));
                                 //user_list.updateUI();
                             } finally {
                                 StyleConstants.setBold(attrset, false);
                                 StyleConstants.setFontSize(attrset, 14);
+                            }
+                        } else if(msg.startsWith("$")) {
+                            //群聊消息
+                            //$groupname@sender:message
+                            String[] ss = msg.split("@");
+                            String fore = ss[0].substring(1);//groupName
+                            String later = ss[1].substring(ss[1].indexOf(":")+1);//message
+                            String mid = ss[1].substring(0,ss[1].indexOf(":"));
+                            System.out.println(mid + " says " + later +" in " + fore);
+                            Document docs = ChatWindowsMap.get(ss[0]).getDocument();
+                            try {
+                                docs.insertString(docs.getLength(),mid + " says "+later+"\n",attrset);
+                            } catch (BadLocationException e) {
+                                e.printStackTrace();
                             }
                         }
                     }
@@ -1060,7 +1223,7 @@ public class ChatClient extends JFrame {
                         String fileName = dis.readUTF();
                         dos.writeUTF("ok");
                         dos.flush();
-                        Path p =Paths.get(path + fileName + ".temp");
+                        Path p = Paths.get(path + fileName + ".temp");
                         //File file = new File("D:\\XJTUchatroom" + File.separatorChar + fileName + ".temp");
                         //FileOutputStream fos = new FileOutputStream(file);
                         if(!Files.exists(p)){ Files.createFile(p); }
