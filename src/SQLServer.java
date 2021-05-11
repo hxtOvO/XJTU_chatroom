@@ -1,4 +1,5 @@
 import java.sql.*;
+import java.util.Vector;
 
 public class SQLServer {
     static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
@@ -63,8 +64,8 @@ public class SQLServer {
             se.printStackTrace();
         }
     }
-    //获取全部用户在线状态的方法
-    public String GetOnlineStatus(){
+    //获取在线状态的方法,包括群和用户
+    public String GetOnlineStatus(String name){
         StringBuilder sb = new StringBuilder(1024);
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
             String sql1 = "SELECT name " +
@@ -73,20 +74,34 @@ public class SQLServer {
             String sql2 = "SELECT name " +
                     "FROM Clients " +
                     "WHERE flag = false";
+            String sql3 = "SELECT DISTINCT gName " +
+                    "FROM TGroup " +
+                    "WHERE cName = ?";
             try (Statement stmt=conn.createStatement()){
                 try(ResultSet rs= stmt.executeQuery(sql1)){
                     while(rs.next()){
                         sb.append(rs.getString("name"))
                                 .append("`");
                     }
-                    sb.append("@");
                 }
+                try(PreparedStatement ps = conn.prepareStatement(sql3)){
+                    ps.setObject(1,name);
+                    try(ResultSet rs = ps.executeQuery()){
+                        while(rs.next()){
+                            sb.append("$");
+                            sb.append(rs.getString("gName"))
+                                    .append("`");
+                        }
+                    }
+                }
+                sb.append("@");
                 try(ResultSet rs = stmt.executeQuery(sql2)){
                     while(rs.next()){
                         sb.append(rs.getString("name"))
                                 .append("`");
                     }
                 }
+
                 String st = sb.toString();
                 if(st.length()!=0) return st;
                 else return "None";
@@ -112,8 +127,7 @@ public class SQLServer {
         return -2;
     }
     //关闭服务端时将所有客户端都设为离线
-    public void ServerClose()
-    {
+    public void ServerClose() {
         try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
             String sql = "UPDATE Clients " +
                     "SET flag = false, num = null";
@@ -122,5 +136,42 @@ public class SQLServer {
             }
         }catch (SQLException se){se.printStackTrace();}
     }
-
+    //连接群和用户
+    public void GroupConnect(String gName, String cName){
+        try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
+            String sql = "INSERT INTO TGroup "+
+                    "(gName, cName) VALUES" +
+                    "(?, ?)";
+            try(PreparedStatement ps= conn.prepareStatement(sql)){
+                ps.setObject(1,gName);
+                ps.setObject(2,cName);
+                ps.executeUpdate();
+            }
+        }catch (SQLException se){
+            se.printStackTrace();
+        }
+    }
+    //查找群中的用户
+    public Vector<Integer> GroupSearch(String gName){
+        Vector<Integer> num = new Vector<>();
+        try(Connection conn=DriverManager.getConnection(DB_URL,User,Password)){
+            String sql = "SELECT c.num " +
+                    "from TGroup as t " +
+                    "join Clients as c " +
+                    "on t.cName = c.name " +
+                    "where t.gName = ? " +
+                    "and c.num is not null";
+            try(PreparedStatement ps=conn.prepareStatement(sql)){
+                ps.setObject(1,gName);
+                try(ResultSet rs= ps.executeQuery()){
+                    while(rs.next()){
+                        num.add(rs.getInt("num"));
+                    }
+                }
+            }
+        } catch (SQLException se){
+            se.printStackTrace();
+        }
+        return num;
+    }
 }

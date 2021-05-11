@@ -10,7 +10,13 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.DateFormat;
 import java.util.*;
 
@@ -36,6 +42,7 @@ public class ChatClient extends JFrame {
     private int userIndex = -1;
     private String username;
     private HashMap<String, JTextPane> ChatWindowsMap;
+    //private Vector<String> vec_server;
     private Vector<String> vec_online;
     private Vector<String> vec_offline;
     private Color[] color;
@@ -77,9 +84,9 @@ public class ChatClient extends JFrame {
         super();
         //换个好看点的UI
         try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
                 if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    UIManager.setLookAndFeel(info.getClassName());
                     break;
                 }
             }
@@ -213,6 +220,11 @@ public class ChatClient extends JFrame {
         offlineFileButton.setText("发送离线文件");
         panel.add(offlineFileButton);
 
+        //接收服务器上的离线文件
+        final JButton getOfflineFileButton = new JButton("接收离线文件");
+        getOfflineFileButton.addActionListener(e -> new getOfflineDialog().createDialog());
+        panel.add(getOfflineFileButton);
+
         //将主窗口分为左右两部分
         final JSplitPane splitPane = new JSplitPane();
         splitPane.setDividerLocation(150);
@@ -317,6 +329,7 @@ public class ChatClient extends JFrame {
         }
         assert str != null;
         String[] ss = str.split("@");
+
         vec_online = new Vector<>(Arrays.asList(ss[0].split("`")));
         vec_offline = new Vector<>(Arrays.asList(ss[1].split("`")));
         //ss[0]处理后是当前在线的，ss[1]处理后是当前离线的
@@ -326,6 +339,7 @@ public class ChatClient extends JFrame {
     //更新用户名单
     public Vector<String> update_user() {
         Vector<String> tmp = new Vector<>(vec_online);
+        tmp.add(0,"server");
         for (int i = 0; i < vec_offline.size(); i++) {
             tmp.add(vec_offline.elementAt(i));
         }
@@ -338,7 +352,13 @@ public class ChatClient extends JFrame {
         for (int i = 0; i < user_all.size(); i++) {
             if (vec_online.contains(user_all.elementAt(i))) {
                 color[i] = Color.yellow;
-            } else color[i] = Color.gray;
+            } else if(vec_offline.contains(user_all.elementAt(i))){
+                color[i] = Color.gray;
+            } else {
+                color[i] = Color.PINK;
+                //System.out.println("server pink");
+            }
+            //System.out.println("i ," + color[i]);
         }
     }
 
@@ -358,6 +378,62 @@ public class ChatClient extends JFrame {
         });
     }
 
+    //接收离线文件界面类
+    public class getOfflineDialog extends JDialog {
+        private JTextField fileName;
+
+        public void createDialog(){
+            //private JTextField fileLength;
+            JDialog jDialog = new JDialog();
+
+            jDialog.setLayout(null);
+
+            jDialog.setBounds(300, 400, 400, 200);
+            jDialog.setTitle("选择接收文件");
+
+            Container c = jDialog.getContentPane();
+            JLabel userName = new JLabel();
+            userName.setText("文件名：");
+            userName.setBounds(25, 50, 50, 30);
+            c.add(userName);
+
+            fileName = new JTextField();
+            fileName.setBounds(100, 50, 100, 30);
+            fileName.addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyTyped(KeyEvent e) {
+                    if (e.getKeyChar() == KeyEvent.VK_ENTER) {
+                        getConnect();
+                    }
+                }
+            });
+            c.add(fileName);
+
+            JButton get = new JButton("确定");
+            get.setBounds(225, 100, 100, 20);
+            get.addActionListener(e -> getConnect());
+            c.add(get);
+            jDialog.setVisible(true);
+        }
+
+        public void getConnect(){
+
+            try {
+                PrintWriter pw = new PrintWriter(socket.getOutputStream(),true);
+                pw.println("@server:/Download/"+fileName.getText());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            System.out.println("@server:/Download/"+fileName.getText());
+
+            new GetFileFrame("111.229.120.197",10180);
+        }
+
+        //public String getFileName(){ return fileName != null ? fileName.getText() : null;}
+
+        //public String getFileLength(){ return fileLength !=null?fileLength.getText():null;}
+    }
+
     //发送文件界面类
     public static class SendFileFrame extends JFrame {
         private static JFrame sendFileFrame;
@@ -365,15 +441,20 @@ public class ChatClient extends JFrame {
         private static JLabel label;
         private static int barSize;
         private static int barOffset;
+        private static JButton stop;
+        private static JButton goon;
+        private static boolean resume = false;
 
         public SendFileFrame(File f, Socket socket) {
             sendFileFrame = new JFrame("文件发送");
             sendFileFrame.setSize(380, 120);
             Container container = sendFileFrame.getContentPane();
             container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
+
             SendFile sf = new SendFile(f, socket);
-            Thread thread = new Thread(sf);
-            thread.start();
+            final Thread[] threadSf = {new Thread(sf)};
+            threadSf[0].start();
+
             progressBar = new JProgressBar();
             label = new JLabel("正在发送：" + f.getName());
             container.add(label);
@@ -401,6 +482,32 @@ public class ChatClient extends JFrame {
             proPanel.add(progressBar);
             proPanel.add(cancel);
 
+            stop = new JButton("暂停");
+            stop.addActionListener(e -> {
+                //resume = false;
+                threadSf[0].stop();
+                SwingUtilities.invokeLater(() -> {
+                    stop.setEnabled(false);
+                    goon.setEnabled(true);
+                });
+            });
+            proPanel.add(stop);
+
+
+            goon = new JButton("继续");
+            goon.addActionListener(e -> {
+                resume = true;
+                threadSf[0] = new Thread(new SendFile(f, socket));
+                threadSf[0].start();
+                SwingUtilities.invokeLater(() -> {
+                    goon.setEnabled(false);
+                    stop.setEnabled(true);
+                });
+            });
+            goon.setEnabled(false);
+            proPanel.add(goon);
+
+
             container.add(proPanel);
             sendFileFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             sendFileFrame.setVisible(true);
@@ -410,6 +517,7 @@ public class ChatClient extends JFrame {
         public static class SendFile implements Runnable {
             private final File file;
             private final Socket soc;
+            private long size;
 
             public SendFile(File f, Socket socket) {
                 file = f;
@@ -426,12 +534,28 @@ public class ChatClient extends JFrame {
                     RandomAccessFile rad = new RandomAccessFile(file, "r");
                     byte[] bytes = new byte[1024];
 
+                    if(resume){
+                        //如果继续，直接继续进循环
+
+                        //传输进度可视化
+                        int length;
+                        if (size < rad.length()) {
+                            rad.seek(size);
+                            while ((length = rad.read(bytes)) > 0) {
+                                dos.write(bytes, 0, length);
+                                SwingUtilities.invokeLater(() -> progressBar.setValue(++barOffset));
+                                dos.flush();
+                            }
+                        }
+                        System.out.println("Send over.");
+                    }
+
                     dos.writeUTF(file.getName());
                     dos.flush();
 
                     String rsp = dis.readUTF();//对方已经接收的
                     if (rsp.equals("ok")) {
-                        long size = dis.readLong();
+                        size = dis.readLong();
                         dos.writeLong(rad.length());
                         dos.writeUTF("ok");
                         dos.flush();
@@ -533,12 +657,7 @@ public class ChatClient extends JFrame {
                 //登录成功，获得当前在线名单
                 user_all = getOnlineList();
                 user_list.setListData(user_all);
-                color = new Color[user_all.size()];
-                for (int i = 0; i < user_all.size(); i++) {
-                    if (vec_online.contains(user_all.elementAt(i))) {
-                        color[i] = Color.yellow;
-                    } else color[i] = Color.gray;
-                }
+                update_color();
                 user_list.setCellRenderer(new MyRenderer(color));
                 //获得在线名单后，建立name与JTextPane的HashMap
                 ChatWindowsMap = new HashMap<>();
@@ -736,7 +855,7 @@ public class ChatClient extends JFrame {
 //                                    Thread thread = new Thread(gf);
 //                                    thread.start();
 
-                                    GetFileFrame gff = new GetFileFrame(InetAddress.getLocalHost().getHostAddress(),Integer.parseInt(ss[3].substring(ss[3].indexOf(":") + 1)));
+                                    new GetFileFrame(InetAddress.getLocalHost().getHostAddress(),Integer.parseInt(ss[3].substring(ss[3].indexOf(":") + 1)));
 //                                    Thread thread = new Thread(gff.);
 //                                    thread.start();
                                     //System.out.println("我收到的ip是 " +ss[4].substring(ss[4].indexOf(":")+1));
@@ -751,12 +870,16 @@ public class ChatClient extends JFrame {
 
                             } else {
                                 String str = msg.substring(1);
-                                String[] mss = str.split(":");
+                                //String[] mss = str.split(":");
+
+                                String fore = str.substring(0,str.indexOf(":"));
+                                String later = str.substring(str.indexOf(":")+1);
+
                                 //是消息内容 @name:msg
                                 try {
-                                    System.out.println(mss[0] + " says " + mss[1]);
-                                    Document docs = ChatWindowsMap.get(mss[0]).getDocument();
-                                    docs.insertString(docs.getLength(), mss[0] + " says: " + mss[1] + "\n", attrset);
+                                    System.out.println(fore + " says " + later);
+                                    Document docs = ChatWindowsMap.get(fore).getDocument();
+                                    docs.insertString(docs.getLength(), fore + " says: " + later + "\n", attrset);
                                     //ta_show.setDocument(docs);
                                 } catch (BadLocationException e) {
                                     e.printStackTrace();
@@ -804,6 +927,7 @@ public class ChatClient extends JFrame {
         private Socket soc = null;
         private File onlineFile;
 
+
         @Override
         public void run() {
             try {
@@ -813,7 +937,7 @@ public class ChatClient extends JFrame {
                     if (soc != null) flag = false;
                 }
                 System.out.println("connect");
-                SendFileFrame sendFileFrame = new SendFileFrame(onlineFile, soc);
+                new SendFileFrame(onlineFile, soc);
                 //SendFileFrame.SendFile(onlineFile, soc);
                 serverSocket.close();
             } catch (IOException e) {
@@ -847,7 +971,7 @@ public class ChatClient extends JFrame {
 
         @Override
         public void run() {
-            SendFileFrame sff = new SendFileFrame(file, offSoc);
+            new SendFileFrame(file, offSoc);
             //SendFileFrame.SendFile(file, offSoc);
         }
 
@@ -873,6 +997,7 @@ public class ChatClient extends JFrame {
         private static JLabel label;
         private static int barSize;
         private static int barOffset;
+        private static GetFile sf;
 
         public GetFileFrame(String ip,int p){
             getFileFrame = new JFrame("文件接收");
@@ -881,9 +1006,9 @@ public class ChatClient extends JFrame {
             Container container = getFileFrame.getContentPane();
             container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
 
-            GetFile sf = new GetFile(ip,p);
-            Thread thread = new Thread(sf);
-            thread.start();
+            sf = new GetFile(ip,p);
+            Thread threadGf = new Thread(sf);
+            threadGf.start();
 
 
             progressBar = new JProgressBar();
@@ -918,8 +1043,13 @@ public class ChatClient extends JFrame {
             getFileFrame.setVisible(true);
         }
 
+//        public Socket getSoc(){
+//            return sf.soc;
+//        }
+
         public static class GetFile implements Runnable{
             private Socket soc;
+            String path = "D:\\XJTUchatroom\\";
 
             @Override
             public void run() {
@@ -930,13 +1060,16 @@ public class ChatClient extends JFrame {
                         String fileName = dis.readUTF();
                         dos.writeUTF("ok");
                         dos.flush();
-                        File file = new File("D:\\XJTUchatroom" + File.separatorChar + fileName + ".temp");
+                        Path p =Paths.get(path + fileName + ".temp");
+                        //File file = new File("D:\\XJTUchatroom" + File.separatorChar + fileName + ".temp");
                         //FileOutputStream fos = new FileOutputStream(file);
-                        RandomAccessFile rad = new RandomAccessFile(file, "rw");
-
+                        if(!Files.exists(p)){ Files.createFile(p); }
+                        SeekableByteChannel seekableByteChannel =
+                                Files.newByteChannel(p, StandardOpenOption.WRITE,StandardOpenOption.READ);
+                        //RandomAccessFile rad = new RandomAccessFile(file, "rw");
                         long recSize = 0;
-                        if (file.exists() && file.isFile()) {
-                            recSize = file.length();
+                        if (Files.exists(p) && Files.isRegularFile(p)) {
+                            recSize = Files.size(p);
                         }
                         dos.writeLong(recSize);
                         dos.flush();
@@ -951,22 +1084,26 @@ public class ChatClient extends JFrame {
                             progressBar.setValue(barOffset);
                         });
 
-
                         if (rsp.equals("ok")) {
-                            rad.seek(recSize);
+                            //rad.seek(recSize);
+                            seekableByteChannel.position(recSize);
                             int length;
-                            byte[] bytes = new byte[1024];
-                            while ((length = dis.read(bytes, 0, bytes.length)) != -1) {
-                                rad.write(bytes, 0, length);
-                                SwingUtilities.invokeLater(() -> progressBar.setValue(++barOffset));
+                            //byte[] bytes = new byte[1024];
+                            ByteBuffer buffer = ByteBuffer.allocate(1024);
+                            while ((length = dis.read(buffer.array(),0,buffer.remaining())) != -1) {
+                                //rad.write(bytes, 0, length);
+                                seekableByteChannel.write(buffer);
+                                buffer.clear();
+                                barOffset += length/1024;
+                                SwingUtilities.invokeLater(() -> progressBar.setValue(barOffset));
                             }
                             System.out.println("Get over.");
                         }
-                        file.renameTo(new File(file.getAbsolutePath()+"/"+fileName));
-                        JOptionPane.showMessageDialog(null, "文件已保存至：" + file.getAbsolutePath());
+                        Files.move(p, Paths.get(path + fileName));
+                        //file.renameTo(new File(file.getAbsolutePath()+"/"+fileName));
+                        JOptionPane.showMessageDialog(null, "文件已保存至：" + path + fileName);
                         getFileFrame.dispose();
                         soc.close();
-
                         //System.out.println(fileName);
                     }
                 } catch (IOException e) {
@@ -983,6 +1120,7 @@ public class ChatClient extends JFrame {
                     InetAddress ipaddr = InetAddress.getByName(ip);
                     System.out.println("建立连接用的ip：" + ipaddr);
                     soc = new Socket(ipaddr, port);
+                    System.out.println(soc.isConnected());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
