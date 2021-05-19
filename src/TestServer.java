@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Scanner;
@@ -124,11 +123,11 @@ public class TestServer {
 
         }
         //登录方法
-        public void LogIn(){
+        public boolean LogIn(){
             System.out.println("Waiting for login info...");
             if(s.isConnected()){
                 String str = GetOnce();
-                if(str.equals("Error")){return;}
+                if(str.equals("Error")){return false;}
                 StringTokenizer st = new StringTokenizer(str,"`");
                 String name = st.nextToken();
                 this.name = name;
@@ -139,31 +138,26 @@ public class TestServer {
                     GetServerDB().ChangeOnline(name,true,num);
                     send2One("1", num);
                     send2All(name+" log in.",num);
+                    return true;
                 }
                 else if(Auth.equals(0)) {
                     //新用户的处理
                     GetServerDB().AddClient(name, pw, num);
                     send2One("1",num);
                     send2All(name+" log in.",num);
+                    return true;
                 }
                 else if(Auth.equals(-1)){
                     send2One("0",num);
-                    try{
-                        s.close();
-                    }catch (IOException e){
-                        e.printStackTrace();
-                    }
+                    return false;
                 }
                 else{
                     System.out.println("Database Error.");
-                    try{
-                        s.close();
-                    }catch (IOException e){
-                        e.printStackTrace();
-                    }
+                    return false;
                 }
             }
             System.out.println("Log in over.");
+            return false;
         }
         //登录成功后,发送一部分数据
         public void SendStatus(){
@@ -247,7 +241,10 @@ public class TestServer {
                             tMsg[0] = msg.substring(1).substring(0,msg.indexOf(":")-1);//name
                             tMsg[1] = msg.substring(msg.indexOf(":"));//msg
                             if(tMsg[1].startsWith("/OnlineFile", 1)){
-                                tMsg[1] = tMsg[1]+"/IP:"+s.getInetAddress().getHostAddress();
+                                tMsg[1] = tMsg[1]+"/IP:111.229.120.197";
+                                OnlineFile of = new OnlineFile();
+                                Thread t = new Thread(of);
+                                t.start();
                             }
                             if(tMsg[1].startsWith("/OfflineFile", 1)){
                                 //@name:/OfflineFile:fileName/FileLength:fileLength
@@ -315,15 +312,68 @@ public class TestServer {
         {
             System.out.println("Start task: " + num);
             try {
-                LogIn();
-                SendStatus();
-                MsgHandler(s, num);
+                if(LogIn()){
+                    SendStatus();
+                    MsgHandler(s, num);
+                } else {
+                    soc.close();
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
             System.out.println("End Task: " + num);
         }
     }
+    //处理在线文件
+    private class OnlineFile implements Runnable{
+        private Socket sender = null;
+        private Socket getter = null;
+        @Override
+        public void run(){
+            try {
+                sender = GetSoc(fileServer);
+                getter = GetSoc(fileServer);
+                DataInputStream sDis = new DataInputStream(sender.getInputStream());
+                DataOutputStream sDos = new DataOutputStream(sender.getOutputStream());
+
+                DataInputStream gDis = new DataInputStream(getter.getInputStream());
+                DataOutputStream gDos = new DataOutputStream(getter.getOutputStream());
+
+                gDos.writeUTF(sDis.readUTF());
+                gDos.flush();
+                if(gDis.readUTF().equals("ok")){
+                    sDos.writeUTF("ok");
+                    sDos.flush();
+                    sDos.writeLong(gDis.readLong());
+                    sDos.flush();
+                    gDos.writeLong(sDis.readLong());
+                    gDos.flush();
+                    if(sDis.readUTF().equals("ok")){
+                        gDos.writeUTF("ok");
+                        gDos.flush();
+                        ByteBuffer buffer = ByteBuffer.allocate(1024);
+                        System.out.println("Start.");
+                        while(sDis.read(buffer.array(),0,buffer.remaining())!=-1){
+                            gDos.write(buffer.array());
+                            buffer.clear();
+                        }
+                        System.out.println("Finish.");
+                    }
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    getter.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        }
+    }
+
     //接收离线文件的类
     private class GetFile implements Runnable{
         private String path = "/home/kkuan/Java/com/Clients/";
@@ -339,30 +389,29 @@ public class TestServer {
                     dos.writeUTF("ok");
                     dos.flush();
                     Path p = Paths.get(path+"/"+fileName+".temp");
+                    File file = new File(path+"/"+fileName+".temp");
                     if(!Files.exists(p)){
                         Files.createFile(p);
                     }
-                    SeekableByteChannel seekableByteChannel =
-                            Files.newByteChannel(p, StandardOpenOption.WRITE,StandardOpenOption.READ);
+                    RandomAccessFile rad = new RandomAccessFile(file, "rw");
                     long recSize = 0;
                     if (Files.exists(p)&&Files.isRegularFile(p)) {
                         recSize = Files.size(p);
                     }
                     dos.writeLong(recSize);
                     dos.flush();
-                    long allSize = dis.readLong();
+                    dis.readLong();
                     String rsp = dis.readUTF();
                     if (rsp.equals("ok")){
-                        seekableByteChannel.position(recSize);
-                        ByteBuffer buffer = ByteBuffer.allocate(1024);
+                        rad.seek(recSize);
+                        int length;
+                        byte[] bytes = new byte[1024];
                         System.out.println("Start get file.");
-                        while (dis.read(buffer.array(),0,buffer.remaining()) !=-1) {
-                            seekableByteChannel.write(buffer);
-                            buffer.clear();
+                        while ((length = dis.read(bytes,0,bytes.length)) !=-1) {
+                            rad.write(bytes, 0, length);
                         }
                         System.out.println("Finish");
-                    }
-                    if(allSize == Files.size(p)){
+                        rad.close();
                         Files.move(p, Paths.get(path + "/" + fileName));
                     }
                 }
@@ -388,27 +437,30 @@ public class TestServer {
         public void run(){
             try{
                 String filePath = "/home/kkuan/Java/com/Clients/";
-                Path p = Paths.get(filePath +userName+"/"+fileName);
+                //Path p = Paths.get(filePath +userName+"/"+fileName);
                 DataOutputStream dos = new DataOutputStream(fileSocket.getOutputStream());
                 DataInputStream dis = new DataInputStream(fileSocket.getInputStream());
-                SeekableByteChannel seekableByteChannel =
-                        Files.newByteChannel(p, StandardOpenOption.WRITE,StandardOpenOption.READ);
+                File file = new File(filePath+userName+"/"+fileName);
+                RandomAccessFile rad = new RandomAccessFile(file, "r");
+                byte[] bytes = new byte[1024];
                 dos.writeUTF(fileName);
                 dos.flush();
-                ByteBuffer buffer = ByteBuffer.allocate(1024);
                 String rsp = dis.readUTF();
                 if(rsp.equals("ok")){
                     long size = dis.readLong();
-                    dos.writeLong(Files.size(p));
+                    dos.writeLong(rad.length());
+                    dos.flush();
                     dos.writeUTF("ok");
                     dos.flush();
-                    if(size<Files.size(p)){
-                        seekableByteChannel.position(size);
+                    if(size<rad.length()){
+                        //seekableByteChannel.position(size);
+                        rad.seek(size);
                         System.out.println("Start send file.");
-                        while(seekableByteChannel.read(buffer)>0){
-                            dos.write(buffer.array(),0,buffer.remaining());
+                        int l;
+                        while((l = rad.read(bytes))>0){
+                            dos.write(bytes, 0, l);
+                            //SwingUtilities.invokeLater(() -> progressBar.setValue(++barOffset));
                             dos.flush();
-                            buffer.clear();
                         }
                     }
                     System.out.println("finish");
@@ -417,7 +469,7 @@ public class TestServer {
                 e.printStackTrace();
             }finally {
                 try{
-                    fileSocket.close();
+                    fileSocket.shutdownOutput();
                 }catch(IOException e){
                     e.printStackTrace();
                 }
